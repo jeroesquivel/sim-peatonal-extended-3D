@@ -1,0 +1,2 @@
+# DXF files are AutoCAD ASCII drawings; track verbatim (no EOL normalization).
+*.dxf binary

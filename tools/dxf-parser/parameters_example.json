@@ -1,0 +1,143 @@
+{
+    "max_time": 1250,
+    "evacuate_at": 1000,
+    "blueprint_name": "Plano-prueba-simulacion-V05.02",
+    "output_delta_time": 0.5,
+
+    "agents_generators": [
+        {
+            "block_name": "SLOW",
+            "plan": "MARKET-CLIENT",
+            "agents": {
+                "min_radius_distribution": {
+                    "type": "UNIFORM",
+                    "min": 0.15,
+                    "max": 0.15
+                },
+                "max_radius_distribution": {
+                    "type": "UNIFORM",
+                    "min": 0.32,
+                    "max": 0.32
+                },
+                "max_velocity": 0.95
+            },
+            "active_time": 10.0,
+            "inactive_time": 40.0,
+            "generation": {
+                "period": 7.5,
+                "quantity_distribution": {
+                    "type": "UNIFORM",
+                    "min": 1.0,
+                    "max": 1.0
+                }
+            }
+        },
+        {
+            "block_name": "FAST",
+            "plan": "MARKET-CLIENT",
+            "agents": {
+                "min_radius_distribution": {
+                    "type": "UNIFORM",
+                    "min": 0.15,
+                    "max": 0.15
+                },
+                "max_radius_distribution": {
+                    "type": "UNIFORM",
+                    "min": 0.32,
+                    "max": 0.32
+                },
+                "max_velocity": 0.95
+            },
+            "active_time": 10.0,
+            "inactive_time": 40.0,
+            "generation": {
+                "period": 7.5,
+                "quantity_distribution": {
+                    "type": "UNIFORM",
+                    "min": 1.0,
+                    "max": 4.0
+                }
+            }
+        }
+    ],
+
+    "targets": [
+        {
+            "block_name": "PRODUCT1",
+            "attending_time_distribution": {
+                "type": "UNIFORM",
+                "min": 4.0,
+                "max": 6.0
+            }
+        },
+        {
+            "block_name": "PRODUCT2",
+            "attending_time_distribution": {
+                "type": "UNIFORM",
+                "min": 8.0,
+                "max": 12.0
+            }
+        }
+    ],
+
+    "servers": [
+        {
+            "block_name": "PRESENTATION",
+            "attending_time_distribution": {
+                "type": "UNIFORM",
+                "min": 4.0,
+                "max": 6.0
+            },
+            "max_capacity": 2,
+            "start_time": 80.0,
+            "inactive_time": 100.0
+        },
+        {
+            "block_name": "CASHIER",
+            "attending_time_distribution": {
+                "type": "GAUSSIAN",
+                "mean": 120.0,
+                "std": 10.0
+            },
+            "max_capacity": 2
+        }
+    ],
+
+    "plans": [
+        {
+            "name": "MARKET-CLIENT",
+            "exit_selection": "RANDOM",
+            "objective_groups": [
+                {
+                    "block_name": "PRODUCT1",
+                    "layer": "TARGETS",
+                    "objective_selection": "CLOSEST",
+                    "quantity_distribution": {
+                        "type": "UNIFORM",
+                        "min": 1.0,
+                        "max": 4.0
+                    }
+                },
+                {
+                    "block_name": "PRODUCT2",
+                    "layer": "TARGETS",
+                    "quantity_distribution": {
+                        "type": "UNIFORM",
+                        "min": 1.0,
+                        "max": 1.0
+                    }
+                },
+                {
+                    "block_name": "CASHIER",
+                    "layer": "SERVERS",
+                    "objective_selection": "CLOSEST",
+                    "quantity_distribution": {
+                        "type": "UNIFORM",
+                        "min": 1.0,
+                        "max": 2.0
+                    }
+                }
+            ]
+        }
+    ]
+}

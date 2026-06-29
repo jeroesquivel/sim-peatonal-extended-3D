@@ -1,0 +1,5 @@
+template_name, step_order, target_type, target_block_name
+default_shopper, 0, TARGET, PRODUCT1
+default_shopper, 1, TARGET, PRODUCT2
+default_shopper, 2, SERVER, CASHIER_1_SERVER
+default_shopper, 3, EXIT, NORMAL

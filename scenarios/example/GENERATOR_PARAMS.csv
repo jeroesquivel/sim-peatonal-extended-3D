@@ -1,0 +1,3 @@
+block_name, mode, rate_or_count, agent_type, plan_template
+SLOW, flowrate, 0.5, slow_walker, default_shopper
+FAST, instant_occupation, 20, fast_walker, default_shopper

@@ -1,0 +1,7 @@
+block_name, type, server_time_param, green_duration, t_init
+CASHIER_1_SERVER, queue, 8.0, ,
+CASHIER_2_SERVER, queue, 8.0, ,
+PRESENTATION_1_SERVER, classroom, 30.0, , 0.0
+PRESENTATION_1_SERVER, classroom, 30.0, , 45.0
+PRESENTATION_2_SERVER, classroom, 30.0, , 0.0
+PRESENTATION_2_SERVER, classroom, 30.0, , 60.0
