@@ -159,9 +159,10 @@ public final class AgentAssembler {
 
     private Task toTask(AgentState state, PlanTemplate template, TaskStep step, int stepIndex) {
         return switch (step.type()) {
-            case LOCATION -> Task.location(step.target(), sampleDwellSeconds(state, template, step, stepIndex));
-            case SERVER -> Task.server(step.target(), step.targetBlockName());
-            case EXIT -> Task.exit(step.target(), step.exitSegment().map(AgentAssembler::doorClearance).orElse(null));
+            case LOCATION -> Task.location(step.target(), sampleDwellSeconds(state, template, step, stepIndex), step.z());
+            case SERVER -> Task.server(step.target(), step.targetBlockName(), step.z());
+            case EXIT -> Task.exit(step.target(),
+                    step.exitSegment().map(AgentAssembler::doorClearance).orElse(null), step.z());
         };
     }
 
@@ -185,12 +186,15 @@ public final class AgentAssembler {
     }
 
     private Task toGroupedLocationTask(AgentState state, PlanTemplate template, PlanStep step, int stepIndex) {
+        // Los candidatos de un grupo comparten planta: tomamos la z del primero.
+        double z = step.candidates().get(0).z();
         return Task.locationGroup(
                 step.blockName(),
                 step.candidates().stream().map(TaskStep::target).toList(),
                 step.selection(),
                 sampleGroupedDwellSeconds(state, template, step, stepIndex),
-                groupedLocationSeed(state, template, step, stepIndex)
+                groupedLocationSeed(state, template, step, stepIndex),
+                z
         );
     }
 

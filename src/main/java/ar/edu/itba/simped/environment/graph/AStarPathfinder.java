@@ -1,11 +1,16 @@
 package ar.edu.itba.simped.environment.graph;
 
-import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 
 import java.util.*;
 
 /**
- * A* sobre un grafo de navegación con heurística de distancia euclidiana.
+ * A* sobre un grafo de navegación con heurística de distancia euclídea 3D.
+ *
+ * <p>Los nodos son {@link Vec3}: la heurística {@code distanceTo} considera las
+ * tres coordenadas (x, y, z), como pide el enunciado para el grafo multiplanta.
+ * Dentro de una planta z es constante (≡ distancia planar); las aristas de
+ * escalera aportan el desnivel.</p>
  */
 public final class AStarPathfinder {
 
@@ -18,7 +23,7 @@ public final class AStarPathfinder {
      * @return lista ordenada de índices de nodos [start, ..., end], o {@code null} si no hay camino.
      */
     public static List<Integer> findPath(int start, int end,
-                                         List<Vec2> nodes,
+                                         List<Vec3> nodes,
                                          List<Map<Integer, Double>> adjacency) {
         if (start == end) return List.of(start);
 
@@ -32,7 +37,7 @@ public final class AStarPathfinder {
         gScore.put(start, 0.0);
         open.add(encode(0.0, start));
 
-        Vec2 goal = nodes.get(end);
+        Vec3 goal = nodes.get(end);
 
         while (!open.isEmpty()) {
             long[] entry = open.poll();

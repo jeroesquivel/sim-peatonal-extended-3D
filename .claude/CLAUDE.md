@@ -127,8 +127,8 @@ Servers, harvest de agentes DEAD, output cada `dtOut`.
 Directorio con CSV (separador `, `). Ejemplo completo en `scenarios/example/`. Los CSV de
 geometría traen columnas `z`. **Desde el paso 2, `input/csv/*` propaga la `z` como "planta"
 de cada elemento** (ver D3 en [`DECISIONES.md`](./DECISIONES.md)): para elementos planos
-`z1==z2` y se usa ese valor; si difieren se emite un warning y se toma `z1`. (El grafo —
-`GraphBuilder.parseWallsCsv`— todavía descarta `z`; se ataca en el paso 4.)
+`z1==z2` y se usa ese valor; si difieren se emite un warning y se toma `z1`. El grafo (paso 4)
+ya construye desde `Geometry` y respeta la `z`.
 
 | Archivo | Columnas | Nota 3D |
 |---|---|---|

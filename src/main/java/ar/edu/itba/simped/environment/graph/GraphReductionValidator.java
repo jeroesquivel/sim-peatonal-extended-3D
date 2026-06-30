@@ -1,6 +1,7 @@
 package ar.edu.itba.simped.environment.graph;
 
 import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -45,7 +46,8 @@ public final class GraphReductionValidator {
 
     private static boolean check(String name, List<Wall> walls, List<GraphBuilder.ServerRect> servers) {
         NavigationGraph g = GraphBuilder.build(walls, servers, SPACING);
-        List<Vec2> nodes = g.getNodes();
+        // El validador es planar (una sola planta): proyectamos los nodos Vec3 a xy.
+        List<Vec2> nodes = g.getNodes().stream().map(Vec3::xy).toList();
         List<Map<Integer, Double>> adj = g.getAdjacency();
 
         boolean connected = isConnected(nodes.size(), adj);

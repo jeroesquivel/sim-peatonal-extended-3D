@@ -12,7 +12,8 @@ import java.util.Optional;
  * propio {@code Task} de G2 (que vive en {@code agent/plan/}).</p>
  *
  * @param type            tipo del target.
- * @param target          posición ya resuelta.
+ * @param target          posición planar ya resuelta.
+ * @param z               planta del target (0 = planta baja).
  * @param targetBlockName nombre del block original (preservado para
  *                        debug y trazabilidad).
  * @param dwellDistribution distribución de dwell del step si aplica;
@@ -21,6 +22,7 @@ import java.util.Optional;
 public record TaskStep(
         TaskType type,
         Vec2 target,
+        double z,
         String targetBlockName,
         Optional<Distribution> dwellDistribution,
         Optional<Segment> exitSegment) {
@@ -43,12 +45,28 @@ public record TaskStep(
         }
     }
 
+    /** Posición 3D del target (planar + planta). */
+    public Vec3 target3D() {
+        return target.withZ(z);
+    }
+
+    public TaskStep(
+            TaskType type,
+            Vec2 target,
+            double z,
+            String targetBlockName,
+            Optional<Distribution> dwellDistribution
+    ) {
+        this(type, target, z, targetBlockName, dwellDistribution, Optional.empty());
+    }
+
+    /** Conveniencia: target en planta baja ({@code z = 0}). */
     public TaskStep(
             TaskType type,
             Vec2 target,
             String targetBlockName,
             Optional<Distribution> dwellDistribution
     ) {
-        this(type, target, targetBlockName, dwellDistribution, Optional.empty());
+        this(type, target, 0.0, targetBlockName, dwellDistribution, Optional.empty());
     }
 }

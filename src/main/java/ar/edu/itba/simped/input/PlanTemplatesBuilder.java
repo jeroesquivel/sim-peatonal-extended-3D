@@ -90,7 +90,8 @@ public final class PlanTemplatesBuilder {
                 return Optional.empty();
             }
             return Optional.of(PlanStep.fixed(
-                    new TaskStep(TaskType.SERVER, serverGroupPosition(group, g), group, Optional.empty())));
+                    new TaskStep(TaskType.SERVER, serverGroupPosition(group, g), serverGroupZ(group, g),
+                            group, Optional.empty())));
         }
         if (s.type() == TaskType.EXIT) {
             Exit exit = g.exits().stream()
@@ -105,17 +106,24 @@ public final class PlanTemplatesBuilder {
             return Optional.of(PlanStep.fixed(new TaskStep(
                     TaskType.EXIT,
                     exit.position(),
+                    exit.z(),
                     exit.blockName(),
                     Optional.empty(),
                     Optional.of(exit.segment()))));
         }
-        Vec2 target = resolveSpecific(s.type(), s.targetBlockName(), g);
-        if (target == null) {
+        // LOCATION
+        Location location = g.locations().stream()
+                .filter(l -> l.blockName().equals(s.targetBlockName()))
+                .findFirst()
+                .orElse(null);
+        if (location == null) {
             acc.add(ValidationCode.V17, loc,
                     "target_block_name '" + s.targetBlockName() + "' not found for type " + s.type());
             return Optional.empty();
         }
-        return Optional.of(PlanStep.fixed(new TaskStep(s.type(), target, s.targetBlockName(), Optional.empty())));
+        return Optional.of(PlanStep.fixed(new TaskStep(
+                TaskType.LOCATION, location.position(), location.z(),
+                location.blockName(), Optional.empty())));
     }
 
     private static Optional<PlanStep> expandGroup(
@@ -123,17 +131,18 @@ public final class PlanTemplatesBuilder {
         List<TaskStep> candidates = switch (gr.type()) {
             case LOCATION -> g.locations().stream()
                     .filter(l -> l.blockName().equals(gr.groupBlockName()))
-                    .map(l -> new TaskStep(TaskType.LOCATION, l.position(), l.blockName(), l.dwellTime()))
+                    .map(l -> new TaskStep(TaskType.LOCATION, l.position(), l.z(), l.blockName(), l.dwellTime()))
                     .toList();
             // SERVER: un único candidato = el grupo lógico (no uno por miembro);
             // la SM delega al grupo y el módulo reparte (softmax).
             case SERVER -> g.serverZones().stream().anyMatch(s -> s.baseName().equals(gr.groupBlockName()))
                     ? List.of(new TaskStep(TaskType.SERVER,
-                            serverGroupPosition(gr.groupBlockName(), g), gr.groupBlockName(), Optional.empty()))
+                            serverGroupPosition(gr.groupBlockName(), g), serverGroupZ(gr.groupBlockName(), g),
+                            gr.groupBlockName(), Optional.empty()))
                     : List.<TaskStep>of();
             case EXIT -> g.exits().stream()
                     .filter(e -> e.blockName().equals(gr.groupBlockName()))
-                    .map(e -> new TaskStep(TaskType.EXIT, e.position(), e.blockName(),
+                    .map(e -> new TaskStep(TaskType.EXIT, e.position(), e.z(), e.blockName(),
                             Optional.empty(), Optional.of(e.segment())))
                     .toList();
         };
@@ -149,16 +158,17 @@ public final class PlanTemplatesBuilder {
             RawPlanStep.RawAnyStep a, GeometryImpl g, String loc, ErrorAccumulator acc) {
         List<TaskStep> candidates = switch (a.type()) {
             case LOCATION -> g.locations().stream()
-                    .map(l -> new TaskStep(TaskType.LOCATION, l.position(), l.blockName(), l.dwellTime()))
+                    .map(l -> new TaskStep(TaskType.LOCATION, l.position(), l.z(), l.blockName(), l.dwellTime()))
                     .toList();
             // SERVER: un candidato por GRUPO lógico distinto (baseName).
             case SERVER -> g.serverZones().stream()
                     .map(ServerZone::baseName)
                     .distinct()
-                    .map(bn -> new TaskStep(TaskType.SERVER, serverGroupPosition(bn, g), bn, Optional.empty()))
+                    .map(bn -> new TaskStep(TaskType.SERVER, serverGroupPosition(bn, g), serverGroupZ(bn, g),
+                            bn, Optional.empty()))
                     .toList();
             case EXIT -> g.exits().stream()
-                    .map(e -> new TaskStep(TaskType.EXIT, e.position(), e.blockName(),
+                    .map(e -> new TaskStep(TaskType.EXIT, e.position(), e.z(), e.blockName(),
                             Optional.empty(), Optional.of(e.segment())))
                     .toList();
         };
@@ -168,26 +178,6 @@ public final class PlanTemplatesBuilder {
             return Optional.empty();
         }
         return Optional.of(new PlanStep(a.type(), "ANY_" + a.type(), a.selection(), Optional.empty(), candidates));
-    }
-
-    private static Vec2 resolveSpecific(TaskType type, String blockName, GeometryImpl g) {
-        return switch (type) {
-            case LOCATION -> g.locations().stream()
-                    .filter(l -> l.blockName().equals(blockName))
-                    .map(Location::position)
-                    .findFirst()
-                    .orElse(null);
-            case SERVER -> g.serverZones().stream()
-                    .filter(s -> matchesServer(s, blockName))
-                    .map(ServerZone::position)
-                    .findFirst()
-                    .orElse(null);
-            case EXIT -> g.exits().stream()
-                    .filter(e -> e.blockName().equals(blockName))
-                    .map(Exit::position)
-                    .findFirst()
-                    .orElse(null);
-        };
     }
 
     private static boolean matchesServer(ServerZone s, String blockName) {
@@ -204,6 +194,15 @@ public final class PlanTemplatesBuilder {
                 .map(ServerZone::baseName)
                 .findFirst()
                 .orElse(null);
+    }
+
+    /** Planta del grupo de servers (la del primer miembro; comparten planta). */
+    private static double serverGroupZ(String baseName, GeometryImpl g) {
+        return g.serverZones().stream()
+                .filter(s -> s.baseName().equals(baseName))
+                .mapToDouble(ServerZone::z)
+                .findFirst()
+                .orElse(0.0);
     }
 
     /** Posición representativa del grupo: centroide de las posiciones de sus

@@ -1,6 +1,7 @@
 package ar.edu.itba.simped.environment.graph;
 
 import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 import ar.edu.itba.simped.core.ports.Geometry;
 
 import java.io.BufferedReader;
@@ -8,7 +9,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Genera un {@link NavigationGraph} automáticamente a partir de la geometría de paredes.
@@ -34,13 +37,135 @@ public final class GraphBuilder {
     // Public API
     // ------------------------------------------------------------------
 
-    /**
-     * I17 vía {@link Geometry} (grupo T4). Pendiente: ver {@code GEOMETRY_INTEGRATION.md}.
-     */
+    private static final double FLOOR_EPS = 1e-6;
+
+    /** Construye el grafo 3D desde {@link Geometry} (I17). Ver {@link #fromGeometry(Geometry, double)}. */
     public static NavigationGraph fromGeometry(Geometry geometry) {
-        throw new UnsupportedOperationException(
-            "Geometry no expone aún paredes ni servidores. "
-            + "Usar StubGraph.fromScenarioFiles() o ver GEOMETRY_INTEGRATION.md en environment.graph");
+        return fromGeometry(geometry, DEFAULT_GRID_SPACING);
+    }
+
+    /**
+     * Construye el grafo multiplanta (paso 4, D6): corre el generador por grilla
+     * <b>una vez por planta</b> (con las paredes de esa planta) y une las plantas
+     * con aristas de escalera. Por cada escalera se agregan un nodo al pie y otro
+     * al tope, conectados al nodo visible más cercano de su planta, y una arista
+     * entre pie y tope cuyo costo es el largo 3D del tramo inclinado.
+     */
+    public static NavigationGraph fromGeometry(Geometry geometry, double gridSpacing) {
+        List<Vec3> nodes = new ArrayList<>();
+        List<Map<Integer, Double>> adjacency = new ArrayList<>();
+        List<Integer> types = new ArrayList<>();
+        List<Wall> allWalls = new ArrayList<>();
+        Map<Long, List<Integer>> nodesByFloor = new HashMap<>();
+
+        for (double z : geometry.floors()) {
+            List<Wall> floorWalls = new ArrayList<>();
+            for (ar.edu.itba.simped.core.Wall cw : geometry.wallsOn(z)) {
+                floorWalls.add(new Wall(cw.p1(), cw.p2(), cw.z()));
+            }
+            if (floorWalls.isEmpty()) {
+                // Sin paredes no hay bounding box para la grilla: esa planta no
+                // aporta malla (sus escaleras igual se agregan abajo).
+                continue;
+            }
+            List<ServerRect> servers = serverRectsOn(geometry, z);
+            GridNodeReducer.Result r = GridNodeReducer.reduce(floorWalls, servers, gridSpacing);
+
+            int base = nodes.size();
+            for (Vec2 n : r.nodes()) {
+                nodes.add(n.withZ(z));
+                nodesByFloor.computeIfAbsent(floorKey(z), k -> new ArrayList<>()).add(nodes.size() - 1);
+            }
+            for (Map<Integer, Double> m : r.adjacency()) {
+                Map<Integer, Double> shifted = new HashMap<>();
+                for (Map.Entry<Integer, Double> e : m.entrySet()) {
+                    shifted.put(e.getKey() + base, e.getValue());
+                }
+                adjacency.add(shifted);
+            }
+            types.addAll(r.types());
+            allWalls.addAll(floorWalls);
+        }
+
+        for (ar.edu.itba.simped.core.Stairs s : geometry.stairs()) {
+            int footIdx = addNode(nodes, adjacency, types, s.foot());
+            int topIdx = addNode(nodes, adjacency, types, s.top());
+            nodesByFloor.computeIfAbsent(floorKey(s.foot().z()), k -> new ArrayList<>()).add(footIdx);
+            nodesByFloor.computeIfAbsent(floorKey(s.top().z()), k -> new ArrayList<>()).add(topIdx);
+
+            connectToFloor(nodes, adjacency, allWalls, nodesByFloor, footIdx);
+            connectToFloor(nodes, adjacency, allWalls, nodesByFloor, topIdx);
+            // Arista de escalera: costo = largo 3D del tramo inclinado.
+            addEdge(adjacency, footIdx, topIdx, s.foot().distanceTo(s.top()));
+        }
+
+        return new NavigationGraph(nodes, adjacency, allWalls, types);
+    }
+
+    private static long floorKey(double z) {
+        return Math.round(z / FLOOR_EPS);
+    }
+
+    /** Server rects (zonas de atención) de la planta {@code z}, como obstáculos del grafo. */
+    private static List<ServerRect> serverRectsOn(Geometry geometry, double z) {
+        List<ServerRect> out = new ArrayList<>();
+        for (ar.edu.itba.simped.core.ServerZone sz : geometry.serverZonesOn(z)) {
+            ar.edu.itba.simped.core.Rectangle area = sz.area();
+            out.add(new ServerRect(sz.baseName() + "_" + sz.id() + "_SERVER", area.a(), area.c()));
+        }
+        return out;
+    }
+
+    private static int addNode(List<Vec3> nodes, List<Map<Integer, Double>> adjacency,
+                               List<Integer> types, Vec3 p) {
+        nodes.add(p);
+        adjacency.add(new HashMap<>());
+        types.add(3); // 3 = nodo de escalera
+        return nodes.size() - 1;
+    }
+
+    private static void addEdge(List<Map<Integer, Double>> adjacency, int i, int j, double w) {
+        adjacency.get(i).put(j, w);
+        adjacency.get(j).put(i, w);
+    }
+
+    /**
+     * Conecta el nodo {@code idx} (pie o tope de una escalera) con el nodo más cercano de su
+     * planta que sea visible (planar, contra las paredes de esa planta); si ninguno es visible,
+     * con el más cercano. El costo es la distancia planar (mismo plano).
+     */
+    private static void connectToFloor(List<Vec3> nodes, List<Map<Integer, Double>> adjacency,
+                                       List<Wall> allWalls, Map<Long, List<Integer>> nodesByFloor,
+                                       int idx) {
+        Vec3 p = nodes.get(idx);
+        long fk = floorKey(p.z());
+        List<Integer> floorNodes = nodesByFloor.getOrDefault(fk, List.of());
+        List<Wall> floorWalls = new ArrayList<>();
+        for (Wall w : allWalls) {
+            if (floorKey(w.z()) == fk) floorWalls.add(w);
+        }
+
+        int bestVisible = -1;
+        double bestVisibleDist = Double.MAX_VALUE;
+        int bestAny = -1;
+        double bestAnyDist = Double.MAX_VALUE;
+        for (int other : floorNodes) {
+            if (other == idx) continue;
+            double d = p.xy().distanceTo(nodes.get(other).xy());
+            if (d < bestAnyDist) {
+                bestAnyDist = d;
+                bestAny = other;
+            }
+            if (d < bestVisibleDist
+                    && VisibilityUtils.isVisible(p.xy(), nodes.get(other).xy(), floorWalls)) {
+                bestVisibleDist = d;
+                bestVisible = other;
+            }
+        }
+        int target = bestVisible >= 0 ? bestVisible : bestAny;
+        if (target >= 0) {
+            addEdge(adjacency, idx, target, bestVisible >= 0 ? bestVisibleDist : bestAnyDist);
+        }
     }
 
     /**
@@ -74,7 +199,14 @@ public final class GraphBuilder {
 
     public static NavigationGraph build(List<Wall> walls, List<ServerRect> servers, double gridSpacing) {
         GridNodeReducer.Result result = GridNodeReducer.reduce(walls, servers, gridSpacing);
-        return new NavigationGraph(result.nodes(), result.adjacency(), walls, result.types());
+        // Camino mono-planta (mock por CSV): los nodos 2D del reducer se elevan a
+        // Vec3 en la planta de las paredes (z de la primera, 0 si no hay).
+        double z = walls.isEmpty() ? 0.0 : walls.get(0).z();
+        List<Vec3> nodes3 = new ArrayList<>(result.nodes().size());
+        for (Vec2 n : result.nodes()) {
+            nodes3.add(n.withZ(z));
+        }
+        return new NavigationGraph(nodes3, result.adjacency(), walls, result.types());
     }
 
     /** Rectángulo de zona de servidor (SERVERS.csv). */
@@ -109,11 +241,11 @@ public final class GraphBuilder {
                 String[] parts = line.split(",");
                 double x1 = Double.parseDouble(parts[0].trim());
                 double y1 = Double.parseDouble(parts[1].trim());
-                // parts[2] = z1 (ignored)
+                double z1 = Double.parseDouble(parts[2].trim());
                 double x2 = Double.parseDouble(parts[3].trim());
                 double y2 = Double.parseDouble(parts[4].trim());
-                // parts[5] = z2 (ignored)
-                walls.add(new Wall(new Vec2(x1, y1), new Vec2(x2, y2)));
+                // parts[5] = z2 (se asume == z1 para un elemento planar)
+                walls.add(new Wall(new Vec2(x1, y1), new Vec2(x2, y2), z1));
             }
         } catch (IOException e) {
             throw new RuntimeException("Error parsing WALLS.csv: " + csvPath, e);

@@ -109,19 +109,23 @@ public final class StubGraph implements Graph {
 
     @Override
     public Vec3 nextVisibleHop(Vec3 agentPosition, Vec3 target) {
-        // Fase A del paso 4: el grafo interno sigue siendo de una planta (2D).
-        // Proyectamos a xy, consultamos, y devolvemos el hop en la planta del
-        // agente. La Fase B reemplaza esto por el grafo 3D por planta.
-        Vec2 hop = queryNextVisibleHop(agentPosition.xy(), target.xy()).hop();
-        return hop.withZ(agentPosition.z());
+        // Grafo 3D por planta (paso 4 Fase B): la malla resuelve el hop con
+        // visibilidad por planta y A* con heurística euclídea 3D.
+        if (mesh == null) {
+            return target;
+        }
+        return mesh.nextVisibleHop(agentPosition, target);
     }
 
-    /** Consulta con detalle de A* y segmento FVP (tests / visualización). */
+    /**
+     * Consulta planar con detalle de A* y segmento FVP (tests / visualización). Eleva los
+     * puntos a la planta baja ({@code z = 0}); el {@code hop} del resultado es planar.
+     */
     public HopQueryResult queryNextVisibleHop(Vec2 agentPosition, Vec2 target) {
         if (mesh == null) {
             return new HopQueryResult(target, true, -1, -1, List.of(), -1, -1);
         }
-        return mesh.queryNextVisibleHop(agentPosition, target);
+        return mesh.queryNextVisibleHop(agentPosition.withZ(0.0), target.withZ(0.0));
     }
 
     private NavigationGraph requireMesh() {

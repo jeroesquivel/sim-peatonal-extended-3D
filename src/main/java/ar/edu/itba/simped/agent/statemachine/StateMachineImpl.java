@@ -118,10 +118,16 @@ public final class StateMachineImpl implements StateMachine {
 
     @Override
     public Vec3 currentFootTarget() {
-        // Fase A del paso 4 (D6): la planta del footTarget se toma de la planta
-        // actual del agente (en escenarios de una sola planta es 0; el ruteo 2D
-        // no cambia). En la Fase B esta z saldrá de la planta del target (Task).
-        return footTarget == null ? null : footTarget.withZ(agentState.z());
+        // El footTarget vive en la planta del target (Task.z): así el Graph rutea
+        // hacia la planta correcta (a través de las escaleras si difiere de la del
+        // agente). currentTask() es la task que produjo el footTarget actual
+        // (también durante LEAVING, donde el plan ya avanzó a la próxima).
+        if (footTarget == null) {
+            return null;
+        }
+        Task task = currentTask();
+        double targetZ = task != null ? task.z() : agentState.z();
+        return footTarget.withZ(targetZ);
     }
 
     @Override

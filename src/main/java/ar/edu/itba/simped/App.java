@@ -129,10 +129,9 @@ public final class App {
                 profile.rmax() * 2.0,
                 om.neighborQueryRadius(cimProbe, ar.edu.itba.simped.core.BehaviorState.WALKING));
         NeighborsIndex neighbors = new CimNeighborsIndex(cimWalls, cimRadius);
-        Graph graph = StubGraph.fromScenarioFiles(
-                scenarioDir.resolve("WALLS.csv").toString(),
-                scenarioDir.resolve("SERVERS.csv").toString()
-        );
+        // Grafo 3D construido desde Geometry (I17, D6): genera la malla por planta
+        // y une las plantas por las escaleras. Reemplaza el re-parseo de CSV.
+        Graph graph = StubGraph.fromGeometry(geometry);
         // Debug opcional: si se setea -Dsimped.hopLog=<archivo>, se registra cada consulta
         // nextVisibleHop (pos -> target -> hop) para visualizar los hops sobre el GIF.
         String hopLog = System.getProperty("simped.hopLog");
