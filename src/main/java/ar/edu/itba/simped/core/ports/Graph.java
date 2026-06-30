@@ -1,6 +1,6 @@
 package ar.edu.itba.simped.core.ports;
 
-import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 
 /**
  * Sub-módulo 5.2 del contract v4. Navigation mesh para path planning.
@@ -25,5 +25,5 @@ public interface Graph {
      * punto visible más lejano al agente sobre ese camino (Furthest Visible Point).
      * </p>
      */
-    Vec2 nextVisibleHop(Vec2 agentPosition, Vec2 target);
+    Vec3 nextVisibleHop(Vec3 agentPosition, Vec3 target);
 }

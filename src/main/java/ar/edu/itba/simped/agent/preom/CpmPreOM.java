@@ -1,7 +1,7 @@
 package ar.edu.itba.simped.agent.preom;
 
 import ar.edu.itba.simped.core.AgentState;
-import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 import ar.edu.itba.simped.core.ports.Graph;
 import ar.edu.itba.simped.core.ports.PreOM;
 
@@ -37,10 +37,10 @@ public final class CpmPreOM implements PreOM {
     private final Graph graph;
     private final double dt;
 
-    private Vec2 activeTarget;
+    private Vec3 activeTarget;
 
     // Estado de throttling
-    private Vec2 cachedHop;
+    private Vec3 cachedHop;
     private double timeSinceLastQuery;
 
     /**
@@ -70,7 +70,7 @@ public final class CpmPreOM implements PreOM {
     }
 
     @Override
-    public Vec2 resolvedFootTarget() {
+    public Vec3 resolvedFootTarget() {
         if (activeTarget == null) {
             return null;
         }
@@ -92,17 +92,17 @@ public final class CpmPreOM implements PreOM {
         }
         timeSinceLastQuery = 0.0;
 
-        Vec2 currentPos = new Vec2(agentState.x(), agentState.y());
+        Vec3 currentPos = agentState.position();
 
         // I14: nextVisibleHop devuelve el target si hay línea de vista directa,
         // o el Furthest Visible Point sobre la ruta A* si no.
-        Vec2 hop = graph.nextVisibleHop(currentPos, activeTarget);
+        Vec3 hop = graph.nextVisibleHop(currentPos, activeTarget);
         cachedHop = hop;
         return hop;
     }
 
     @Override
-    public void activate(Vec2 footTarget) {
+    public void activate(Vec3 footTarget) {
         // I11: Activates target resolution for a normal plan task.
         // Si el target cambió, reseteamos el estado de throttling.
         if (!sameTarget(footTarget, this.activeTarget)) {
@@ -112,7 +112,7 @@ public final class CpmPreOM implements PreOM {
     }
 
     @Override
-    public void onServerTarget(Vec2 target) {
+    public void onServerTarget(Vec3 target) {
         // I13b: Server-provided queue/service target overrides during delegation.
         if (!sameTarget(target, this.activeTarget)) {
             this.activeTarget = target;
@@ -125,7 +125,7 @@ public final class CpmPreOM implements PreOM {
         this.timeSinceLastQuery = REQUERY_INTERVAL_SECONDS; // fuerza query inmediata
     }
 
-    private static boolean sameTarget(Vec2 a, Vec2 b) {
+    private static boolean sameTarget(Vec3 a, Vec3 b) {
         if (a == b) return true;
         if (a == null || b == null) return false;
         return a.equals(b);

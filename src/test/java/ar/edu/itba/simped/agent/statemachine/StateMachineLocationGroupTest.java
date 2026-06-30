@@ -39,7 +39,7 @@ class StateMachineLocationGroupTest {
                 List.of()
         );
 
-        assertThat(sm.currentFootTarget()).isEqualTo(new Vec2(3.0, 0.0));
+        assertThat(sm.currentFootTarget().xy()).isEqualTo(new Vec2(3.0, 0.0));
         assertThat(task.target()).isEqualTo(new Vec2(3.0, 0.0));
     }
 
@@ -71,7 +71,7 @@ class StateMachineLocationGroupTest {
         sm.onArrival();
 
         assertThat(sm.currentBehavior()).isEqualTo(BehaviorState.WALKING);
-        assertThat(sm.currentFootTarget()).isEqualTo(new Vec2(7.0, 0.0));
+        assertThat(sm.currentFootTarget().xy()).isEqualTo(new Vec2(7.0, 0.0));
         assertThat(task.target()).isEqualTo(new Vec2(7.0, 0.0));
     }
 

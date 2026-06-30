@@ -3,6 +3,7 @@ package ar.edu.itba.simped.agent.sensors;
 import ar.edu.itba.simped.core.AgentState;
 import ar.edu.itba.simped.core.BehaviorState;
 import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 import ar.edu.itba.simped.core.ports.Sensors;
 import ar.edu.itba.simped.core.ports.ServerSignal;
 import ar.edu.itba.simped.core.ports.StandardServerSignal;
@@ -80,7 +81,11 @@ public final class SensorsImpl implements Sensors {
 
     @Override
     public void sense() {
-        Vec2 target = stateMachine.currentFootTarget();
+        // El arrival se evalúa en el plano de la planta del agente: proyectamos
+        // el foot-target 3D a xy (la z indica la planta del target, no afecta la
+        // distancia planar de llegada).
+        Vec3 footTarget3 = stateMachine.currentFootTarget();
+        Vec2 target = footTarget3 == null ? null : footTarget3.xy();
         setFootTarget(target);
 
         if (target == null) {

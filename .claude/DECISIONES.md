@@ -148,3 +148,73 @@ sin tocarlas):
 **Nota.** `floorOf(z)` para una `z` continua (agente a mitad de escalera) es un concepto de
 **runtime** (qué grilla del CIM le corresponde); se resuelve en el paso 5, no acá.
 
+---
+
+## D6 — Grafo 3D: footTarget a `Vec3` en el pipeline + grafo por planta unido por escaleras + cableado desde `Geometry`
+
+- **Fecha:** 2026-06-30
+- **Estado:** vigente
+- **Paso del plan:** 4 (Graph 3D)
+
+**Contexto.** Hoy el `footTarget` es `Vec2` de punta a punta (StateMachine → PreOM → OM) y
+el grafo es uno solo (una planta), con nodos `Vec2`, A* con heurística 2D, y se arma en App
+re-parseando `WALLS.csv`/`SERVERS.csv` (descartando `z`), sin pasar por `Geometry`. Para
+rutear entre plantas el grafo necesita la planta (`z`) del agente **y del target**; la del
+target solo la conoce la StateMachine (arma el footTarget desde un Location/Exit/Server con `z`).
+
+**Decisión.**
+- **`footTarget` pasa a `Vec3`** en el pipeline del agente: `StateMachine.currentFootTarget()`,
+  `PreOM.activate(Vec3)`/`resolvedFootTarget():Vec3`/`onServerTarget(Vec3)`,
+  `OperationalModel.integrate(..., Vec3 footTarget, ...)`. El OM proyecta con `footTarget.xy()`
+  para la física planar (sin cambio de comportamiento 2D).
+- **`Graph.nextVisibleHop(Vec3 agentPosition, Vec3 target) : Vec3`** (floor-aware).
+- **Grafo interno 3D:** los nodos del `NavigationGraph` pasan a `Vec3`; el A* usa
+  `Vec3.distanceTo` (heurística euclídea 3D, como pide el enunciado). Los costos de arista
+  intra-planta son la distancia planar (= 3D, misma `z`); las aristas de escalera tienen el
+  costo del tramo inclinado (distancia 3D pie↔tope).
+- **Grafo por planta unido por escaleras:** se corre el generador automático
+  (`GridNodeReducer`) **una vez por planta** (con las paredes de esa planta, `wallsOn(z)`), y
+  luego se **unen** los subgrafos agregando, por cada escalera, nodos en el pie y el tope y una
+  arista entre ellos (`stairsAt`). La visibilidad y el FVP son **por planta** (un agente no
+  "ve" nodos de otra planta salvo a través de la arista de escalera).
+- **Cableado desde `Geometry`:** se implementa `GraphBuilder.fromGeometry(Geometry)` (hoy lanza
+  `UnsupportedOperationException`) y App pasa a construir el grafo desde `Geometry` (única
+  fuente con `z` + escaleras + `floors()`), en vez de re-parsear los CSV.
+
+**Queda para el paso 6 (no en el 4):** la **física de z en la escalera** (interpolar
+`z = lerp` por progreso y aplicar `speedFactor`). En el paso 4 el ruteo en `xy` ya recorre la
+huella de la escalera; la `z` del agente todavía no se actualiza al subir.
+
+**Alternativa descartada:**
+- *Pipeline en `Vec2` + `z` por params en el puerto Graph* (`nextVisibleHop(Vec2 xy, double z, …)`):
+  menos cascada ahora pero deja el puerto más feo y el footTarget igual debe pasar a `Vec3` en
+  el paso 6 (trabajo duplicado).
+
+**Ejecución en 2 fases (build verde en cada una):**
+- *Fase A* — plumbing `Vec3` en el pipeline (puertos + impls + stubs + servers + AgentImpl). La
+  `z` del footTarget se adjunta en el getter `StateMachine.currentFootTarget()` usando
+  `agentState.z()` (en una sola planta = 0, comportamiento 2D idéntico); el OM proyecta `.xy()`.
+  El grafo sigue siendo de una planta internamente (StubGraph adapta `Vec3↔Vec2`).
+- *Fase B* — internals 3D del grafo (generación por planta, cosido por escaleras, heurística 3D,
+  `fromGeometry`, App desde Geometry) + la `z` del footTarget pasa a salir del **target real**
+  (`Task`/`TaskStep` cargan la planta del destino), no de `agentState.z()`.
+
+---
+
+## D7 — Eliminar SFM (`SfmaOperationalModel`); usar siempre CPM
+
+- **Fecha:** 2026-06-30
+- **Estado:** vigente
+- **Paso del plan:** 4 (limpieza durante el cascade Vec3)
+
+**Contexto.** El `CLAUDE.md` (regla 3) ya autoriza ignorar/eliminar SFM y usar siempre CPM. Al
+pasar `OperationalModel.integrate` a `Vec3` (D6), `SfmaOperationalModel` y su test (~30 call
+sites) sumaban cascada por un modelo que no se usa.
+
+**Decisión.** Se eliminan `agent/om/SfmaOperationalModel.java` y
+`SfmaOperationalModelTest.java`. App usa **siempre CPM** (el default de `om` pasa de `sfm` a
+`cpm`; cualquier valor no-`cpm` cae igual a CPM). Queda `StubOperationalModel` (placeholder del
+puerto, sin lógica) y `CpmOperationalModel` como único modelo real.
+
+**Motivo.** Alinea con la regla 3, baja el churn del cascade y corrige el default a CPM.
+

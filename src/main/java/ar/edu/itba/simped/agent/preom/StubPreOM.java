@@ -1,6 +1,6 @@
 package ar.edu.itba.simped.agent.preom;
 
-import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 import ar.edu.itba.simped.core.ports.PreOM;
 
 /**
@@ -13,20 +13,20 @@ import ar.edu.itba.simped.core.ports.PreOM;
  */
 public final class StubPreOM implements PreOM {
 
-    private Vec2 activeTarget;
+    private Vec3 activeTarget;
 
     @Override
-    public Vec2 resolvedFootTarget() {
+    public Vec3 resolvedFootTarget() {
         return activeTarget;
     }
 
     @Override
-    public void activate(Vec2 footTarget) {
+    public void activate(Vec3 footTarget) {
         this.activeTarget = footTarget;
     }
 
     @Override
-    public void onServerTarget(Vec2 target) {
+    public void onServerTarget(Vec3 target) {
         this.activeTarget = target;
     }
 }

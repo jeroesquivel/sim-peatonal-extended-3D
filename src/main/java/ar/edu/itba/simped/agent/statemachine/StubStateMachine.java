@@ -1,15 +1,15 @@
 package ar.edu.itba.simped.agent.statemachine;
 
 import ar.edu.itba.simped.core.BehaviorState;
-import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 import ar.edu.itba.simped.core.ports.StateMachine;
 
 /** STUB - implementado por G2. Reemplazar. */
 public final class StubStateMachine implements StateMachine {
 
     @Override
-    public Vec2 currentFootTarget() {
-        return Vec2.ZERO; // TODO G2
+    public Vec3 currentFootTarget() {
+        return Vec3.ZERO; // TODO G2
     }
 
     @Override

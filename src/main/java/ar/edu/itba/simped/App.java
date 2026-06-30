@@ -25,8 +25,8 @@ import ar.edu.itba.simped.core.ports.ScenarioLoader;
 import ar.edu.itba.simped.core.ports.Server;
 import ar.edu.itba.simped.core.ports.SimulationDriver;
 import ar.edu.itba.simped.agent.om.CpmOperationalModel;
+// SFM eliminado (D7): se usa siempre CPM.
 import ar.edu.itba.simped.agent.om.CpmParameters;
-import ar.edu.itba.simped.agent.om.SfmaOperationalModel;
 import ar.edu.itba.simped.environment.EnvironmentImpl;
 import ar.edu.itba.simped.environment.LocationOccupancyImpl;
 import ar.edu.itba.simped.environment.servers.engine.ServersModule;
@@ -71,13 +71,6 @@ public final class App {
     private static final String DEFAULT_SCENARIO_DIR = "scenarios/example";
     private static final String DEFAULT_OUTPUT_FILE = "out/output.csv";
 
-    /**
-     * Profile default cuando se corre con SFM. Mientras G3/G9 no carguen perfiles
-     * por tipo de agente desde el scenario, todos los agentes comparten este.
-     */
-    private static final AgentProfile SFM_DEFAULT_PROFILE =
-            new AgentProfile(1.4, 0.5, 0.5, 2.0, 0.0, 0.0);
-
     private App() {
     }
 
@@ -111,19 +104,11 @@ public final class App {
             throw new IllegalStateException("Plan template no encontrado: " + templateName);
         }
 
-        // El profile y el OM concreto se eligen juntos según omChoice: cada
-        // modelo trae el preset que sabe usar (SFM ignora beta/ve, CPM los
-        // necesita en valores compatibles con su dinámica).
+        // Se usa siempre CPM (D7: SFM eliminado). El omChoice se conserva por
+        // compatibilidad de CLI pero cualquier valor resuelve a CPM.
         List<Wall> cimWalls = toNeighborsWalls(geometry);
-        AgentProfile profile;
-        OperationalModel om;
-        if ("cpm".equalsIgnoreCase(omChoice)) {
-            profile = CpmParameters.baglietoParisiSet1();
-            om = new CpmOperationalModel(cimWalls);
-        } else {
-            profile = SFM_DEFAULT_PROFILE;
-            om = new SfmaOperationalModel(cimWalls);
-        }
+        AgentProfile profile = CpmParameters.baglietoParisiSet1();
+        OperationalModel om = new CpmOperationalModel(cimWalls);
 
         // El dt efectivo lo acota el OM: usamos min(dt del escenario, dt que el
         // modelo considera estable para este profile). Así el escenario no fuerza
@@ -272,8 +257,9 @@ public final class App {
     }
 
     /**
-     * Resuelve qué OM usar. Prioridad: arg posicional > env var > default "sfm".
-     * Valores aceptados (case-insensitive): {@code sfm}, {@code cpm}.
+     * Resuelve qué OM usar. Prioridad: arg posicional > env var > default "cpm".
+     * Tras D7 solo existe CPM; el valor se conserva por compat de CLI pero
+     * App siempre construye CPM.
      */
     private static String pickOmChoice(String[] args) {
         if (args.length >= 3 && !args[2].isBlank()) {
@@ -283,7 +269,7 @@ public final class App {
         if (env != null && !env.isBlank()) {
             return env.toLowerCase();
         }
-        return "sfm";
+        return "cpm";
     }
 
     private static List<Wall> toNeighborsWalls(Geometry geometry) {

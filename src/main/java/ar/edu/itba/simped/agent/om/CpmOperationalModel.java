@@ -6,6 +6,7 @@ import ar.edu.itba.simped.core.BehaviorState;
 import ar.edu.itba.simped.core.Neighbor;
 import ar.edu.itba.simped.core.NeighborType;
 import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 import ar.edu.itba.simped.core.ports.OperationalModel;
 import ar.edu.itba.simped.environment.neighbors.Wall;
 
@@ -95,11 +96,15 @@ public final class CpmOperationalModel implements OperationalModel {
     @Override
     public void integrate(
             AgentState state,
-            Vec2 footTarget,
+            Vec3 footTarget3,
             BehaviorState behavior,
             List<Neighbor> neighbors,
             double dt
     ) {
+        // La dinámica del CPM es planar (D1): se opera sobre la proyección xy del
+        // foot-target. La z del agente (planta / escalera) la maneja aparte el
+        // paso 6 (interpolación en la escalera), no las fuerzas de este modelo.
+        Vec2 footTarget = footTarget3 == null ? null : footTarget3.xy();
         AgentProfile profile = state.profile();
         // Experimento Grupo 7: si SIMPED_CPM_SET pidió otro rmin, lo aplicamos acá
         // (manteniendo el resto del perfil, sobre todo rmax). Así barremos rmin sin

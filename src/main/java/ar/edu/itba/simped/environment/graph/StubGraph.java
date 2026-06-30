@@ -1,6 +1,7 @@
 package ar.edu.itba.simped.environment.graph;
 
 import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 import ar.edu.itba.simped.core.ports.Geometry;
 import ar.edu.itba.simped.core.ports.Graph;
 
@@ -107,8 +108,12 @@ public final class StubGraph implements Graph {
     }
 
     @Override
-    public Vec2 nextVisibleHop(Vec2 agentPosition, Vec2 target) {
-        return queryNextVisibleHop(agentPosition, target).hop();
+    public Vec3 nextVisibleHop(Vec3 agentPosition, Vec3 target) {
+        // Fase A del paso 4: el grafo interno sigue siendo de una planta (2D).
+        // Proyectamos a xy, consultamos, y devolvemos el hop en la planta del
+        // agente. La Fase B reemplaza esto por el grafo 3D por planta.
+        Vec2 hop = queryNextVisibleHop(agentPosition.xy(), target.xy()).hop();
+        return hop.withZ(agentPosition.z());
     }
 
     /** Consulta con detalle de A* y segmento FVP (tests / visualización). */
@@ -150,7 +155,7 @@ public final class StubGraph implements Graph {
 
         Vec2 from = new Vec2(25.0, 1.0);
         Vec2 to = new Vec2(25.0, 19.0);
-        Vec2 hop = graph.nextVisibleHop(from, to);
+        Vec2 hop = graph.queryNextVisibleHop(from, to).hop();
         System.out.println("Hop from " + from + " toward " + to + ": " + hop);
     }
 }

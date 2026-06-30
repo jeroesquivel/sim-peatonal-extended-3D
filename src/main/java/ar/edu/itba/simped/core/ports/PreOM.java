@@ -1,6 +1,6 @@
 package ar.edu.itba.simped.core.ports;
 
-import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 
 /**
  * Sub-módulo 4.5 del contract v4 (Pre-Operational Model).
@@ -20,12 +20,12 @@ import ar.edu.itba.simped.core.Vec2;
  */
 public interface PreOM {
 
-    /** I15a: foot-target resuelto que OM va a trackear. */
-    Vec2 resolvedFootTarget();
+    /** I15a: foot-target 3D resuelto que OM va a trackear. */
+    Vec3 resolvedFootTarget();
 
     /** I11: activa la resolución para una task normal. */
-    void activate(Vec2 footTarget);
+    void activate(Vec3 footTarget);
 
     /** I13b: target intermedio provisto por Server durante delegación. */
-    void onServerTarget(Vec2 target);
+    void onServerTarget(Vec3 target);
 }

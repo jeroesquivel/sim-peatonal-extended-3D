@@ -4,7 +4,7 @@ import ar.edu.itba.simped.core.AgentProfile;
 import ar.edu.itba.simped.core.AgentState;
 import ar.edu.itba.simped.core.BehaviorState;
 import ar.edu.itba.simped.core.Neighbor;
-import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 
 import java.util.List;
 
@@ -55,7 +55,7 @@ public interface OperationalModel {
      */
     void integrate(
             AgentState state,
-            Vec2 footTarget,
+            Vec3 footTarget,
             BehaviorState behavior,
             List<Neighbor> neighbors,
             double dt

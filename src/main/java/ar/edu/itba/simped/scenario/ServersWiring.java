@@ -71,7 +71,10 @@ public final class ServersWiring {
         TargetSink targetSink = (agentId, target) -> {
             Agent a = registry.get(agentId);
             if (a instanceof AgentImpl impl) {
-                impl.setServerTarget(target);   // I13b: el agente sigue el target del Server
+                // I13b: el agente sigue el target del Server. El target del módulo
+                // es planar (xy); lo ubicamos en la planta actual del agente
+                // (Fase A: una sola planta → z del agente).
+                impl.setServerTarget(target.withZ(impl.state().z()));
             }
         };
         EventSink eventSink = new EventSink() {

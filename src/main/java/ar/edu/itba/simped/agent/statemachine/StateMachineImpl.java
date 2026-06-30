@@ -7,6 +7,7 @@ import ar.edu.itba.simped.core.Task;
 import ar.edu.itba.simped.core.TaskStatus;
 import ar.edu.itba.simped.core.TaskType;
 import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 import ar.edu.itba.simped.core.ports.Agent;
 import ar.edu.itba.simped.core.ports.LocationOccupancy;
 import ar.edu.itba.simped.core.ports.Plan;
@@ -116,8 +117,11 @@ public final class StateMachineImpl implements StateMachine {
     }
 
     @Override
-    public Vec2 currentFootTarget() {
-        return footTarget;
+    public Vec3 currentFootTarget() {
+        // Fase A del paso 4 (D6): la planta del footTarget se toma de la planta
+        // actual del agente (en escenarios de una sola planta es 0; el ruteo 2D
+        // no cambia). En la Fase B esta z saldrá de la planta del target (Task).
+        return footTarget == null ? null : footTarget.withZ(agentState.z());
     }
 
     @Override

@@ -3,7 +3,7 @@ package ar.edu.itba.simped.agent;
 import ar.edu.itba.simped.core.AgentState;
 import ar.edu.itba.simped.core.BehaviorState;
 import ar.edu.itba.simped.core.Neighbor;
-import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 import ar.edu.itba.simped.core.ports.Agent;
 import ar.edu.itba.simped.core.ports.NeighborsIndex;
 import ar.edu.itba.simped.core.ports.OperationalModel;
@@ -35,7 +35,7 @@ public final class AgentImpl implements Agent {
     private final NeighborsIndex neighbors;
 
     /** Último target fino empujado por un Server vía I13b (null si no hay). */
-    private Vec2 serverTarget;
+    private Vec3 serverTarget;
 
     public AgentImpl(
             AgentState state,
@@ -58,7 +58,7 @@ public final class AgentImpl implements Agent {
         sensors.sense();
         sm.tick(dt);
 
-        Vec2 target = sm.currentFootTarget();
+        Vec3 target = sm.currentFootTarget();
         // Mientras el agente está delegado a un Server, este empuja los targets
         // finos (slot de cola / posición de servicio / región de espera) vía
         // I13b y mandan sobre el foot-target grueso de la SM, sea cual sea el
@@ -73,7 +73,7 @@ public final class AgentImpl implements Agent {
         }
         preom.activate(target);
 
-        Vec2 footTarget = preom.resolvedFootTarget();
+        Vec3 footTarget = preom.resolvedFootTarget();
         if (footTarget == null) {
             return;
         }
@@ -105,7 +105,7 @@ public final class AgentImpl implements Agent {
      * I13b: el wiring de Servers (T6) inyecta acá el target fino que el
      * {@code ServersModule} empuja para este agente mientras está delegado.
      */
-    public void setServerTarget(Vec2 target) {
+    public void setServerTarget(Vec3 target) {
         this.serverTarget = target;
     }
 }

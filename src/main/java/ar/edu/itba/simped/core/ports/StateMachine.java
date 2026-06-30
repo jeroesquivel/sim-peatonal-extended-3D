@@ -1,7 +1,7 @@
 package ar.edu.itba.simped.core.ports;
 
 import ar.edu.itba.simped.core.BehaviorState;
-import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 
 /**
  * Sub-módulo 4.4 del contract v4.
@@ -23,8 +23,8 @@ import ar.edu.itba.simped.core.Vec2;
  */
 public interface StateMachine {
 
-    /** I9: foot-target derivado de la task activa del Plan. */
-    Vec2 currentFootTarget();
+    /** I9: foot-target 3D derivado de la task activa del Plan ({@code z} = planta del target). */
+    Vec3 currentFootTarget();
 
     /** Estado comportamental actual del agente. */
     BehaviorState currentBehavior();

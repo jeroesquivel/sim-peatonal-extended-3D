@@ -38,7 +38,7 @@ class StateMachineImplTest {
         sm.tick(2.0);
 
         assertThat(sm.currentBehavior()).isEqualTo(BehaviorState.LEAVING);
-        assertThat(sm.currentFootTarget()).isEqualTo(nextLocation.target());
+        assertThat(sm.currentFootTarget().xy()).isEqualTo(nextLocation.target());
 
         sm.onArrival();
         assertThat(sm.currentBehavior()).isEqualTo(BehaviorState.LEAVING);

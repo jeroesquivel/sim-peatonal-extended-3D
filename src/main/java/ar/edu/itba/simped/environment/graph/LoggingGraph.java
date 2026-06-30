@@ -1,6 +1,7 @@
 package ar.edu.itba.simped.environment.graph;
 
 import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 import ar.edu.itba.simped.core.ports.Graph;
 
 import java.io.BufferedWriter;
@@ -58,9 +59,10 @@ public final class LoggingGraph implements Graph {
     }
 
     @Override
-    public Vec2 nextVisibleHop(Vec2 agentPosition, Vec2 target) {
-        Vec2 hop = delegate.nextVisibleHop(agentPosition, target);
-        log(agentPosition, target, hop);
+    public Vec3 nextVisibleHop(Vec3 agentPosition, Vec3 target) {
+        Vec3 hop = delegate.nextVisibleHop(agentPosition, target);
+        // El log de hops es planar (xy): proyectamos para mantener el formato CSV.
+        log(agentPosition.xy(), target == null ? null : target.xy(), hop == null ? null : hop.xy());
         return hop;
     }
 

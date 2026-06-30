@@ -33,7 +33,7 @@ class StateMachineExitSegmentTest {
         );
 
         assertThat(sm.currentBehavior()).isEqualTo(BehaviorState.WALKING);
-        assertThat(sm.currentFootTarget()).isEqualTo(new Vec2(10.0, 5.0));
+        assertThat(sm.currentFootTarget().xy()).isEqualTo(new Vec2(10.0, 5.0));
     }
 
     private static final class NoOpLocationOccupancy implements LocationOccupancy {
