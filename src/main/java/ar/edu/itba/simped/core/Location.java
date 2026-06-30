@@ -10,12 +10,13 @@ import java.util.Optional;
  * {@code figure_type ∈ {CIRCLE, RECTANGLE}}.</p>
  *
  * @param blockName    nombre del block en el DXF/CSV (clave de join).
- * @param shape        figura geométrica (Circle o Rectangle).
+ * @param shape        figura geométrica planar (Circle o Rectangle).
+ * @param z            planta a la que pertenece el target (0 = planta baja).
  * @param dwellTime    distribución de tiempo de atención por visita
  *                     ({@code empty()} si no se especifica). Los CSV
  *                     actuales no lo pueblan; reservado para extensiones.
  */
-public record Location(String blockName, Shape shape, Optional<Distribution> dwellTime) {
+public record Location(String blockName, Shape shape, double z, Optional<Distribution> dwellTime) {
 
     public Location {
         if (blockName == null || blockName.isBlank()) {
@@ -29,7 +30,17 @@ public record Location(String blockName, Shape shape, Optional<Distribution> dwe
         }
     }
 
+    /** Target en la planta baja ({@code z = 0}). */
+    public Location(String blockName, Shape shape, Optional<Distribution> dwellTime) {
+        this(blockName, shape, 0.0, dwellTime);
+    }
+
     public Vec2 position() {
         return shape.centroid();
+    }
+
+    /** Posición 3D (centroide de la figura en su planta). */
+    public Vec3 position3D() {
+        return shape.centroid().withZ(z);
     }
 }

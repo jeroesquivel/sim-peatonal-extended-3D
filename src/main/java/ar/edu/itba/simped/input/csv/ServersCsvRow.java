@@ -13,9 +13,18 @@ public sealed interface ServersCsvRow permits ServersCsvRow.ServerRow, ServersCs
 
     int id();
 
-    record ServerRow(String base, int id, Rectangle area) implements ServersCsvRow {
+    /** Planta a la que pertenece la fila (0 = planta baja). */
+    double z();
+
+    record ServerRow(String base, int id, Rectangle area, double z) implements ServersCsvRow {
+        public ServerRow(String base, int id, Rectangle area) {
+            this(base, id, area, 0.0);
+        }
     }
 
-    record QueueRow(String base, int id, int queueIndex, Segment segment) implements ServersCsvRow {
+    record QueueRow(String base, int id, int queueIndex, Segment segment, double z) implements ServersCsvRow {
+        public QueueRow(String base, int id, int queueIndex, Segment segment) {
+            this(base, id, queueIndex, segment, 0.0);
+        }
     }
 }

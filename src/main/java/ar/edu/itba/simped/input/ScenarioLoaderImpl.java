@@ -5,6 +5,7 @@ import ar.edu.itba.simped.core.Exit;
 import ar.edu.itba.simped.core.LoadedScenario;
 import ar.edu.itba.simped.core.Location;
 import ar.edu.itba.simped.core.PlanTemplate;
+import ar.edu.itba.simped.core.Stairs;
 import ar.edu.itba.simped.core.Wall;
 import ar.edu.itba.simped.core.ports.ScenarioLoader;
 import ar.edu.itba.simped.environment.geometry.GeometryImpl;
@@ -13,9 +14,11 @@ import ar.edu.itba.simped.input.csv.GeneratorsCsvReader;
 import ar.edu.itba.simped.input.csv.GeneratorsCsvRow;
 import ar.edu.itba.simped.input.csv.ServersCsvReader;
 import ar.edu.itba.simped.input.csv.ServersCsvRow;
+import ar.edu.itba.simped.input.csv.StairsCsvReader;
 import ar.edu.itba.simped.input.csv.TargetsCsvReader;
 import ar.edu.itba.simped.input.csv.WallsCsvReader;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +57,11 @@ public final class ScenarioLoaderImpl implements ScenarioLoader {
                 .read(scenarioDir.resolve("GENERATORS.csv"), acc);
         List<ServersCsvRow> serverRows = new ServersCsvReader()
                 .read(scenarioDir.resolve("SERVERS.csv"), acc);
+        // STAIRS.csv es opcional: los escenarios de una sola planta no lo traen.
+        Path stairsPath = scenarioDir.resolve("STAIRS.csv");
+        List<Stairs> stairs = Files.exists(stairsPath)
+                ? new StairsCsvReader().read(stairsPath, acc)
+                : List.of();
 
         RawParams params;
         Map<String, Distribution> dwellsByBlock;
@@ -73,7 +81,7 @@ public final class ScenarioLoaderImpl implements ScenarioLoader {
         BlockInMultipleLayersValidator.validate(locations, exits, generatorRows, serverRows, acc);
 
         GeometryImpl geometry = GeometryAssembler.assemble(
-                walls, locations, exits, generatorRows, serverRows,
+                walls, locations, exits, stairs, generatorRows, serverRows,
                 params, dwellsByBlock, serverTypeStrategy, acc);
 
         Map<String, PlanTemplate> templates = PlanTemplatesBuilder.build(

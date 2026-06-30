@@ -27,6 +27,7 @@ public record ServerZone(
         String baseName,
         int id,
         Rectangle area,
+        double z,
         List<Segment> queues,
         ServerType type,
         ServerParams params) {
@@ -47,7 +48,18 @@ public record ServerZone(
         queues = List.copyOf(queues);
     }
 
+    /** Server en la planta baja ({@code z = 0}). */
+    public ServerZone(String baseName, int id, Rectangle area,
+                      List<Segment> queues, ServerType type, ServerParams params) {
+        this(baseName, id, area, 0.0, queues, type, params);
+    }
+
     public Vec2 position() {
         return area.centroid();
+    }
+
+    /** Posición 3D (centro del área de atención en su planta). */
+    public Vec3 position3D() {
+        return area.centroid().withZ(z);
     }
 }

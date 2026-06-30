@@ -31,13 +31,14 @@ public final class ServersCsvReader extends CsvReader<ServersCsvRow> {
         double y1 = CsvParse.parseDouble(tokens.get(2), path, lineNumber, layerName());
         double x2 = CsvParse.parseDouble(tokens.get(4), path, lineNumber, layerName());
         double y2 = CsvParse.parseDouble(tokens.get(5), path, lineNumber, layerName());
+        double z = CsvParse.parseFloorZ(tokens.get(3), tokens.get(6), path, lineNumber, layerName());
 
         return switch (p.kind()) {
             case SERVER -> new ServersCsvRow.ServerRow(p.base(), p.id(),
-                    new Rectangle(new Vec2(x1, y1), new Vec2(x2, y2)));
+                    new Rectangle(new Vec2(x1, y1), new Vec2(x2, y2)), z);
             case QUEUE -> new ServersCsvRow.QueueRow(p.base(), p.id(),
                     p.queueIndex().orElseThrow(),
-                    new Segment(new Vec2(x1, y1), new Vec2(x2, y2)));
+                    new Segment(new Vec2(x1, y1), new Vec2(x2, y2)), z);
         };
     }
 

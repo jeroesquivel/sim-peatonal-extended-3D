@@ -18,7 +18,8 @@ public final class WallsCsvReader extends CsvReader<Wall> {
         double y1 = CsvParse.parseDouble(tokens.get(1), path, lineNumber, layerName());
         double x2 = CsvParse.parseDouble(tokens.get(3), path, lineNumber, layerName());
         double y2 = CsvParse.parseDouble(tokens.get(4), path, lineNumber, layerName());
-        return new Wall(new Vec2(x1, y1), new Vec2(x2, y2));
+        double z = CsvParse.parseFloorZ(tokens.get(2), tokens.get(5), path, lineNumber, layerName());
+        return new Wall(new Vec2(x1, y1), new Vec2(x2, y2), z);
     }
 
     @Override

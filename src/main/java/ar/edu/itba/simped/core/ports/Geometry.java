@@ -4,6 +4,7 @@ import ar.edu.itba.simped.core.Exit;
 import ar.edu.itba.simped.core.GeneratorZone;
 import ar.edu.itba.simped.core.Location;
 import ar.edu.itba.simped.core.ServerZone;
+import ar.edu.itba.simped.core.Stairs;
 import ar.edu.itba.simped.core.Wall;
 
 import java.util.List;
@@ -36,4 +37,11 @@ public interface Geometry {
     List<GeneratorZone> generatorZones();
 
     List<ServerZone> serverZones();
+
+    /**
+     * Escaleras que conectan plantas (vacío en escenarios de una sola planta).
+     * Las usa el {@link Graph} para unir los grafos por planta y el
+     * {@link OperationalModel} para la velocidad reducida e interpolación de z.
+     */
+    List<Stairs> stairs();
 }

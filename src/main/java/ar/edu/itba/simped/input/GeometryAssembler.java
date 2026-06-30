@@ -9,6 +9,7 @@ import ar.edu.itba.simped.core.Segment;
 import ar.edu.itba.simped.core.ServerParams;
 import ar.edu.itba.simped.core.ServerType;
 import ar.edu.itba.simped.core.ServerZone;
+import ar.edu.itba.simped.core.Stairs;
 import ar.edu.itba.simped.core.Wall;
 import ar.edu.itba.simped.core.validation.ValidationCode;
 import ar.edu.itba.simped.environment.geometry.GeometryImpl;
@@ -48,6 +49,7 @@ public final class GeometryAssembler {
             List<Wall> walls,
             List<Location> locationsRaw,
             List<Exit> exits,
+            List<Stairs> stairs,
             List<GeneratorsCsvRow> generatorRows,
             List<ServersCsvRow> serverRows,
             RawParams params,
@@ -58,7 +60,7 @@ public final class GeometryAssembler {
         List<Location> locations = enrichLocations(locationsRaw, dwellsByBlock);
         List<GeneratorZone> generatorZones = buildGenerators(generatorRows, params, acc);
         List<ServerZone> serverZones = buildServers(serverRows, params, serverTypeStrategy, acc);
-        return new GeometryImpl(walls, locations, exits, generatorZones, serverZones);
+        return new GeometryImpl(walls, locations, exits, generatorZones, serverZones, stairs);
     }
 
     private static List<Location> enrichLocations(List<Location> raw, Map<String, Distribution> dwellsByBlock) {
@@ -68,7 +70,7 @@ public final class GeometryAssembler {
         List<Location> out = new ArrayList<>(raw.size());
         for (Location l : raw) {
             Distribution dwell = dwellsByBlock.get(l.blockName());
-            out.add(dwell == null ? l : new Location(l.blockName(), l.shape(), Optional.of(dwell)));
+            out.add(dwell == null ? l : new Location(l.blockName(), l.shape(), l.z(), Optional.of(dwell)));
         }
         return out;
     }

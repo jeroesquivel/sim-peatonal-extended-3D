@@ -29,6 +29,7 @@ public final class TargetsCsvReader extends CsvReader<Location> {
         double y1 = CsvParse.parseDouble(tokens.get(4), path, lineNumber, layerName());
         double x2 = CsvParse.parseDouble(tokens.get(6), path, lineNumber, layerName());
         double y2 = CsvParse.parseDouble(tokens.get(7), path, lineNumber, layerName());
+        double z = CsvParse.parseFloorZ(tokens.get(5), tokens.get(8), path, lineNumber, layerName());
 
         Shape shape = switch (figureType) {
             case "CIRCLE" -> new Circle(new Vec2(x1, y1), radius);
@@ -36,7 +37,7 @@ public final class TargetsCsvReader extends CsvReader<Location> {
             default -> throw unsupportedEntityException(path, lineNumber,
                     "unknown figure_type '" + figureType + "', expected CIRCLE or RECTANGLE");
         };
-        return new Location(blockName, shape, Optional.empty());
+        return new Location(blockName, shape, z, Optional.empty());
     }
 
     @Override

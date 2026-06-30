@@ -4,6 +4,7 @@ import ar.edu.itba.simped.core.Exit;
 import ar.edu.itba.simped.core.GeneratorZone;
 import ar.edu.itba.simped.core.Location;
 import ar.edu.itba.simped.core.ServerZone;
+import ar.edu.itba.simped.core.Stairs;
 import ar.edu.itba.simped.core.Wall;
 import ar.edu.itba.simped.core.ports.Geometry;
 
@@ -40,6 +41,11 @@ public final class StubGeometry implements Geometry {
 
     @Override
     public List<ServerZone> serverZones() {
+        return List.of();
+    }
+
+    @Override
+    public List<Stairs> stairs() {
         return List.of();
     }
 }

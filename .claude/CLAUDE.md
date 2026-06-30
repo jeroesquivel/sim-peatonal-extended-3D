@@ -124,17 +124,20 @@ Servers, harvest de agentes DEAD, output cada `dtOut`.
 
 ## Formato de escenarios
 
-Directorio con CSV (separador `, `). Ejemplo completo en `scenarios/example/`. **Los CSV de
-geometría ya traen columnas `z`**, pero hoy el código las **parsea y descarta** (ver
-`input/csv/WallsCsvReader` y `GraphBuilder.parseWallsCsv`: leen `z1`/`z2` y los ignoran).
+Directorio con CSV (separador `, `). Ejemplo completo en `scenarios/example/`. Los CSV de
+geometría traen columnas `z`. **Desde el paso 2, `input/csv/*` propaga la `z` como "planta"
+de cada elemento** (ver D3 en [`DECISIONES.md`](./DECISIONES.md)): para elementos planos
+`z1==z2` y se usa ese valor; si difieren se emite un warning y se toma `z1`. (El grafo —
+`GraphBuilder.parseWallsCsv`— todavía descarta `z`; se ataca en el paso 4.)
 
 | Archivo | Columnas | Nota 3D |
 |---|---|---|
-| `WALLS.csv` | `x1,y1,z1,x2,y2,z2` | `z` descartado hoy |
-| `EXITS.csv` | `block_name,x1,y1,z1,x2,y2,z2` | `z` descartado |
-| `GENERATORS.csv` | `block_name,x1,y1,z1,x2,y2,z2` | `z` descartado |
-| `TARGETS.csv` | `block_name,figure_type,radius,x1,y1,z1,x2,y2,z2` | `z` descartado |
-| `SERVERS.csv` | `block_name,x1,y1,z1,x2,y2,z2` (sufijos `_SERVER`, `_QUEUE000`…) | `z` descartado |
+| `WALLS.csv` | `x1,y1,z1,x2,y2,z2` | `z` = planta de la pared |
+| `EXITS.csv` | `block_name,x1,y1,z1,x2,y2,z2` | `z` = planta de la salida |
+| `GENERATORS.csv` | `block_name,x1,y1,z1,x2,y2,z2` | `z` = planta de la zona de spawn |
+| `TARGETS.csv` | `block_name,figure_type,radius,x1,y1,z1,x2,y2,z2` | `z` = planta del target |
+| `SERVERS.csv` | `block_name,x1,y1,z1,x2,y2,z2` (sufijos `_SERVER`, `_QUEUE000`…) | `z` = planta del server |
+| `STAIRS.csv` *(nuevo, opcional)* | `block_name,x1,y1,z1,x2,y2,z2,width[,speed_factor]` | escalera: eje pie `(x1,y1,z1)` → tope `(x2,y2,z2)`, `z1≠z2` (ver D4) |
 
 Params: `SIM_PARAMS.csv` (dt, dt_out, t_total), `GENERATOR_PARAMS.csv`, `SERVER_PARAMS.csv`,
 `PLANS.csv` (templates de plan: `template_name, step_order, target_type, target_block_name`

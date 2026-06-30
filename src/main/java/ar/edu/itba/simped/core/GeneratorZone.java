@@ -14,6 +14,7 @@ package ar.edu.itba.simped.core;
 public record GeneratorZone(
         String blockName,
         Rectangle spawnArea,
+        double z,
         GeneratorRawParams params) {
 
     public GeneratorZone {
@@ -26,5 +27,10 @@ public record GeneratorZone(
         if (params == null) {
             throw new IllegalArgumentException("GeneratorZone requires non-null params");
         }
+    }
+
+    /** Zona de spawn en la planta baja ({@code z = 0}). */
+    public GeneratorZone(String blockName, Rectangle spawnArea, GeneratorRawParams params) {
+        this(blockName, spawnArea, 0.0, params);
     }
 }

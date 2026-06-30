@@ -57,3 +57,61 @@ actualiza por **interpolación del progreso del agente a lo largo del tramo de e
   El enunciado no lo pide y complica el CPM.
 
 **Motivo.** El CPM es planar; la dinámica vertical no aporta al modelo y agrega riesgo.
+
+---
+
+## D3 — Geometría: una "planta" `z` por elemento (no `z` por extremo)
+
+- **Fecha:** 2026-06-30
+- **Estado:** vigente
+- **Paso del plan:** 2 (input deja de descartar `z`)
+
+**Contexto.** Los CSV de geometría (`WALLS`, `EXITS`, `GENERATORS`, `TARGETS`, `SERVERS`)
+traen `z1` y `z2` por extremo, hoy parseados y descartados. En geometría plana `z1==z2`
+(todos los puntos de un muro/salida están en la misma planta).
+
+**Decisión.** Cada elemento de geometría lleva **una única coordenada de planta `z`**
+(un `double`), conservando su forma **planar en `Vec2`**:
+- `Wall(Vec2 p1, Vec2 p2, double z)`, `Exit(blockName, Segment, double z, …)`,
+  `Location(blockName, Shape, double z, …)`, `GeneratorZone(…, double z)`,
+  `ServerZone(…, double z)`.
+- Al leer el CSV: si `z1==z2` se usa ese valor; si difieren, **warning** y se toma `z1`
+  (los elementos planos no deben tener `z1≠z2`; las escaleras se declaran aparte, ver D4).
+
+**Alternativas descartadas:**
+- *Endpoints en `Vec3` (z por extremo)*: permitiría muros inclinados pero rompe la
+  planaridad de toda la geometría y complica el CIM por planta y el anti-tunneling 2D del CPM.
+
+**Motivo.** Coherente con D1: un muro/salida pertenece a una planta; la dinámica y la
+detección de vecinos operan por planta.
+
+---
+
+## D4 — Escaleras: nuevo `STAIRS.csv`, eje con `z` por extremo + ancho
+
+- **Fecha:** 2026-06-30
+- **Estado:** vigente
+- **Paso del plan:** 2 (definir y parsear escaleras)
+
+**Contexto.** La escalera es el elemento nuevo que conecta plantas. Hay que decidir cómo
+se declara en los escenarios.
+
+**Decisión.** Nuevo archivo **`STAIRS.csv`** (los CSV de geometría existentes quedan
+intactos). Cada fila = el **eje** de la escalera como segmento con `z` por extremo:
+
+```
+block_name, x1,y1,z1, x2,y2,z2, width[, speed_factor]
+MAIN, 10,5,0.0, 10,9,3.0, 2.0, 0.5
+```
+
+- Extremo 1 = **pie** (en planta `z1`); extremo 2 = **tope** (en planta `z2`), con `z1≠z2`.
+- El agente recorre el eje proyectado `(x,y)` e **interpola** `z = lerp(z1, z2, avance_xy/largo_xy)`.
+- `width` = ancho de la escalera. `speed_factor` opcional = factor de velocidad reducida
+  (default a una constante global; se usa en el paso 6, CPM). Reusa el formato de 6 columnas
+  de geometría (la `z` por extremo recién acá tiene `z1≠z2`).
+- Nuevo tipo `core/Stairs`; `Geometry` expone `List<Stairs> stairs()`.
+
+**Alternativas descartadas:**
+- *Rectángulo footprint + `z_from/z_to`*: ambiguo qué borde es pie y cuál tope.
+- *Dos landings explícitos*: redundante con el eje (mismo contenido, más columnas).
+
