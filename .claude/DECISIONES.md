@@ -115,3 +115,36 @@ MAIN, 10,5,0.0, 10,9,3.0, 2.0, 0.5
 - *Rectángulo footprint + `z_from/z_to`*: ambiguo qué borde es pie y cuál tope.
 - *Dos landings explícitos*: redundante con el eje (mismo contenido, más columnas).
 
+---
+
+## D5 — `Geometry` por planta: consultas `default` keyed por `z` (double)
+
+- **Fecha:** 2026-06-30
+- **Estado:** vigente
+- **Paso del plan:** 3 (Geometry expone plantas + escaleras)
+
+**Contexto.** El grafo (paso 4) y el CIM (paso 5) operan **por planta**. La geometría ya
+expone los elementos con su `z` (D3) y las escaleras (D4); falta una API cómoda para
+consultarlos por planta.
+
+**Decisión.** Una planta se identifica por su **valor `z` (double)**, con tolerancia
+`Geometry.FLOOR_EPS = 1e-6` para comparaciones/dedup. Las consultas se agregan como
+**métodos `default` en el puerto `Geometry`** (las heredan `GeometryImpl` y `StubGeometry`
+sin tocarlas):
+- `List<Double> floors()` — niveles de planta distintos presentes (de walls/exits/locations/
+  generators/servers + extremos de escaleras), ordenados ascendentemente y deduplicados por eps.
+- `wallsOn(z)`, `exitsOn(z)`, `locationsOn(z)`, `generatorZonesOn(z)`, `serverZonesOn(z)` —
+  elementos cuya planta coincide con `z` (±eps).
+- `stairsAt(z)` — escaleras que tocan la planta `z` en su pie **o** su tope (para que el
+  grafo una los grafos por planta a través de ellas).
+
+**Alternativas descartadas:**
+- *Índice entero de planta (0,1,2…)*: agrega una capa de mapeo índice↔z; los datos ya viven
+  en `z`. Si hiciera falta, se deriva de `floors()`.
+- *Clase `Floors` separada que precompute*: los consumidores arman sus estructuras una vez en
+  init (Geometry es read-only post-init), así que filtrar on-demand alcanza. `GeometryImpl`
+  puede overridear para precomputar si la performance lo pide.
+
+**Nota.** `floorOf(z)` para una `z` continua (agente a mitad de escalera) es un concepto de
+**runtime** (qué grilla del CIM le corresponde); se resuelve en el paso 5, no acá.
+
