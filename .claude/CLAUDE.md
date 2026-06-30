@@ -21,6 +21,14 @@ escaleras**, es decir, llevarlo a 3D. Ver el enunciado completo en
    [`.claude/LIMPIEZA_RASTROS_GRUPOS.md`](./LIMPIEZA_RASTROS_GRUPOS.md) para limpiarlos.
 3. **Usar siempre CPM** (Contractile Particle Model) como modelo físico. SFM existe pero no
    se usa en este TP (`SfmaOperationalModel` puede ignorarse/eliminarse).
+4. **Registrar todas las decisiones en [`.claude/DECISIONES.md`](./DECISIONES.md).** Es la
+   fuente de verdad de las decisiones de arquitectura del TP. Reglas:
+   - **Consultar `DECISIONES.md` antes de realizar cualquier cambio en la arquitectura del
+     proyecto** (tipos base, puertos, formato de escenarios/output, modelo físico, etc.).
+   - **Toda decisión tomada debe agregarse** como una entrada nueva (`D<n>`) con fecha,
+     contexto, decisión, alternativas descartadas y motivo.
+   - **Todo cambio sobre una decisión existente debe quedar registrado** ahí (actualizar su
+     estado y dejar constancia del cambio, sin borrar el historial).
 
 ---
 

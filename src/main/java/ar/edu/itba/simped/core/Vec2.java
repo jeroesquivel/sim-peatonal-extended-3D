@@ -42,4 +42,9 @@ public record Vec2(double x, double y) {
         if (n <= maxNorm || n < 1e-12) return this;
         return scale(maxNorm / n);
     }
+
+    /** Eleva este punto planar a 3D agregándole la altura {@code z}. */
+    public Vec3 withZ(double z) {
+        return new Vec3(x, y, z);
+    }
 }

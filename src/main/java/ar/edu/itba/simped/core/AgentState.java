@@ -17,6 +17,7 @@ public final class AgentState {
 
     private double x;
     private double y;
+    private double z;
     private double vx;
     private double vy;
     private double radius;
@@ -53,6 +54,14 @@ public final class AgentState {
         return y;
     }
 
+    /**
+     * Altura/planta del agente. {@code z} cambia principalmente al recorrer una
+     * escalera (la dinámica horizontal del CPM no la toca). Default 0 = planta baja.
+     */
+    public double z() {
+        return z;
+    }
+
     public double vx() {
         return vx;
     }
@@ -77,6 +86,10 @@ public final class AgentState {
         this.y = y;
     }
 
+    public void setZ(double z) {
+        this.z = z;
+    }
+
     public void setVx(double vx) {
         this.vx = vx;
     }
@@ -89,9 +102,27 @@ public final class AgentState {
         this.radius = radius;
     }
 
+    /**
+     * Mueve al agente en el plano horizontal <b>conservando su {@code z}</b>.
+     * Es la que usa la física planar del CPM cada {@code dt}: la altura solo la
+     * cambia el avance por escalera vía {@link #setZ(double)} o
+     * {@link #setPosition(double, double, double)}.
+     */
     public void setPosition(double x, double y) {
         this.x = x;
         this.y = y;
+    }
+
+    /** Ubica al agente en el espacio 3D (planta incluida). */
+    public void setPosition(double x, double y, double z) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+    }
+
+    /** Posición 3D del agente (proyectable al plano con {@link Vec3#xy()}). */
+    public Vec3 position() {
+        return new Vec3(x, y, z);
     }
 
     public void setVelocity(double vx, double vy) {
