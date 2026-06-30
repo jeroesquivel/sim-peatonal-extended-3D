@@ -33,7 +33,7 @@ import ar.edu.itba.simped.environment.servers.engine.ServersModule;
 import ar.edu.itba.simped.environment.generator.ConfigurablePedestrianGenerator;
 import ar.edu.itba.simped.environment.generator.GenerationMode;
 import ar.edu.itba.simped.environment.graph.StubGraph;
-import ar.edu.itba.simped.environment.neighbors.CimNeighborsIndex;
+import ar.edu.itba.simped.environment.neighbors.FloorAwareNeighborsIndex;
 import ar.edu.itba.simped.environment.neighbors.Wall;
 import ar.edu.itba.simped.scenario.AgentAssembler;
 import ar.edu.itba.simped.scenario.CompositePedestrianGenerator;
@@ -106,7 +106,9 @@ public final class App {
 
         // Se usa siempre CPM (D7: SFM eliminado). El omChoice se conserva por
         // compatibilidad de CLI pero cualquier valor resuelve a CPM.
-        List<Wall> cimWalls = toNeighborsWalls(geometry);
+        // Lista global de paredes (D8): el mismo orden/espacio de ids que usa el
+        // FloorAwareNeighborsIndex, para que el OM resuelva los wallId de los vecinos.
+        List<Wall> cimWalls = FloorAwareNeighborsIndex.globalWalls(geometry);
         AgentProfile profile = CpmParameters.baglietoParisiSet1();
         OperationalModel om = new CpmOperationalModel(cimWalls);
 
@@ -128,7 +130,9 @@ public final class App {
         double cimRadius = Math.max(
                 profile.rmax() * 2.0,
                 om.neighborQueryRadius(cimProbe, ar.edu.itba.simped.core.BehaviorState.WALKING));
-        NeighborsIndex neighbors = new CimNeighborsIndex(cimWalls, cimRadius);
+        // CIM por planta (D8): una grilla por planta + puente por escalera. En
+        // escenarios de una sola planta degenera a una grilla 2D (igual que antes).
+        NeighborsIndex neighbors = FloorAwareNeighborsIndex.fromGeometry(geometry, cimRadius);
         // Grafo 3D construido desde Geometry (I17, D6): genera la malla por planta
         // y une las plantas por las escaleras. Reemplaza el re-parseo de CSV.
         Graph graph = StubGraph.fromGeometry(geometry);
@@ -269,13 +273,5 @@ public final class App {
             return env.toLowerCase();
         }
         return "cpm";
-    }
-
-    private static List<Wall> toNeighborsWalls(Geometry geometry) {
-        List<Wall> out = new ArrayList<>(geometry.walls().size());
-        for (ar.edu.itba.simped.core.Wall w : geometry.walls()) {
-            out.add(new Wall(w.p1(), w.p2()));
-        }
-        return out;
     }
 }

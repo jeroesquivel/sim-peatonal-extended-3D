@@ -218,3 +218,69 @@ puerto, sin lógica) y `CpmOperationalModel` como único modelo real.
 
 **Motivo.** Alinea con la regla 3, baja el churn del cascade y corrige el default a CPM.
 
+---
+
+## D8 — CIM por planta: facade `FloorAwareNeighborsIndex` + puente brute-force por escalera + ids de pared globales
+
+- **Fecha:** 2026-06-30
+- **Estado:** vigente
+- **Paso del plan:** 5 (CIM por planta)
+
+**Contexto.** El `CimNeighborsIndex` es **una sola grilla 2D** `(x,y)`: indexa paredes
+(`neighbors.Wall`, 2D) en el ctor y agentes vía `update`, y devuelve vecinos por **distancia
+planar**. App lo cablea aplanando **todas** las paredes de **todas** las plantas a una lista
+2D (`toNeighborsWalls`), perdiendo la `z`. El enunciado pide que **la detección de vecinos sea
+independiente por planta, salvo en las escaleras**, y que las paredes (punto más cercano) y sus
+vértices se sigan detectando como vecinos. El puerto `NeighborsIndex` ya recibe `AgentState`
+(que ya tiene `z()`), así que no hace falta tocar el puerto.
+
+**Restricción dura encontrada.** El `Neighbor` de tipo `WALL` lleva payload `null` y un `id` que
+es el **índice de la pared**; el `CpmOperationalModel` resuelve `walls.get(neighbor.id())` contra
+**su propia lista** (la misma lista plana que App le pasa hoy en el ctor). Es decir, **el id de
+pared es un espacio global compartido entre índice y OM**. Si cada grilla por planta usara
+`wallsOn(z)` con ids locales, esos ids dejarían de coincidir con la lista del OM y romperían la
+repulsión de paredes (incluso `IllegalStateException` en CPM:535).
+
+**Decisión.**
+- **Facade nuevo `environment/neighbors/FloorAwareNeighborsIndex implements NeighborsIndex`**;
+  `CimNeighborsIndex` queda **intacto** (sigue siendo la grilla 2D de una planta).
+- **Una `CimNeighborsIndex` por planta** de `geometry.floors()`, cada una con `wallsOn(z)`.
+- **Visibilidad en escalera = índice "puente" por escalera** (brute-force, pocos agentes): cada
+  escalera tiene su propio bucket de agentes. **Acople en los descansos:** un agente *en planta*
+  consulta su grilla **+** los puentes de las escaleras que aterrizan en esa planta; un agente
+  *en escalera* consulta su puente **+** las dos grillas de planta de sus extremos. Los conjuntos
+  de agentes de cada contenedor son **disjuntos** (un agente vive en exactamente uno) → no hace
+  falta deduplicar.
+- **Clasificación runtime (`floorOf`, el pendiente que D5 dejó para este paso):** si `z` ≈ una
+  planta discreta (±`FLOOR_EPS`) → esa planta; si `z` está **entre** plantas → escalera cuyo
+  footprint (proyección sobre el eje `axisXy()` con `perp ≤ width/2` y `t∈[0,1]`) contiene `(x,y)`
+  y cuyo rango `z` la abarca; fallback a planta más cercana. (En pisos planos la `z` del agente
+  siempre coincide con una planta; sólo el avance por escalera la pone entre plantas.)
+- **Espacio de ids de pared global:** el facade construye **una lista global de paredes**
+  (concatenación determinística de `wallsOn(z)` sobre `floors()`), guarda un mapa `local→global`
+  por planta y **reescribe** el `id` de cada vecino `WALL` (record inmutable → nuevo `Neighbor`)
+  de local a global antes de devolverlo. App pasa `FloorAwareNeighborsIndex.globalWalls(geometry)`
+  al `CpmOperationalModel` (misma lista/orden) para que los ids resuelvan. Los puentes no tienen
+  paredes propias (paso 5): el agente en escalera obtiene las paredes de los descansos vía las dos
+  grillas de planta.
+- **Distancia planar** en todos los contenedores (igual que el CIM actual), incluido el puente.
+
+**Paridad 1 planta.** `floors()=[z]` → una grilla con todas las paredes, mapa identidad, sin
+escaleras: comportamiento idéntico al CIM 2D de hoy (la lista global = `geometry.walls()` en su
+orden original, igual que la que recibía el OM).
+
+**Alternativas descartadas:**
+- *Snap a la planta más cercana (sin puente)*: lo más simple, pero dos agentes en la misma
+  escalera cerca del punto medio caen en grillas distintas y **no se ven** (discontinuidad). El
+  enunciado pide explícito el caso escalera → se eligió el puente.
+- *Modificar `CimNeighborsIndex` para tener las grillas por planta adentro*: acopla la lógica de
+  plantas a la grilla y reescribe la clase 2D ya andando; se prefirió el facade (menor riesgo de
+  regresión en el caso 2D).
+- *Grilla 3D única*: las celdas verticales no aportan (los pisos son planos y la separación entre
+  plantas es discreta); complica sin beneficio.
+
+**Pendiente para el paso 6 (no en el 5):** el `CpmOperationalModel` recibe hoy la lista global de
+paredes para su anti-tunneling, pero **filtra por planta del agente** queda para el paso 6 (paredes
+de la planta actual). Posible cleanup futuro: que el `Neighbor` de pared lleve la geometría en el
+payload y el OM deje de depender de un espacio de ids compartido.
+
