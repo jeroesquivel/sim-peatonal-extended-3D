@@ -4,7 +4,6 @@ import ar.edu.itba.simped.core.AgentState;
 import ar.edu.itba.simped.core.Neighbor;
 import ar.edu.itba.simped.core.NeighborType;
 import ar.edu.itba.simped.core.Stairs;
-import ar.edu.itba.simped.core.Vec3;
 import ar.edu.itba.simped.core.ports.Geometry;
 import ar.edu.itba.simped.core.ports.NeighborsIndex;
 
@@ -40,8 +39,6 @@ import java.util.Map;
 public final class FloorAwareNeighborsIndex implements NeighborsIndex {
 
     private static final double FLOOR_EPS = Geometry.FLOOR_EPS;
-    /** Tolerancia para el footprint de la escalera (proyección sobre el eje). */
-    private static final double STAIR_T_EPS = 1e-6;
 
     private final double[] floorLevels;
     private final CimNeighborsIndex[] floorGrids;   // paralelo a floorLevels; null si la planta no tiene paredes
@@ -247,45 +244,19 @@ public final class FloorAwareNeighborsIndex implements NeighborsIndex {
         if (Math.abs(floorLevels[nf] - a.z()) <= FLOOR_EPS) {
             return new Loc(false, nf);
         }
-        // z entre plantas: el agente está sobre una escalera. Elegir la escalera
-        // cuyo rango z lo abarca y cuyo footprint contiene (x,y); desempate por
-        // menor distancia perpendicular al eje.
-        int best = -1;
-        double bestPerp = Double.POSITIVE_INFINITY;
+        // z entre plantas: el agente está sobre una escalera. La primera escalera
+        // cuyo rango z lo abarca y cuya huella contiene (x,y) (las huellas no se
+        // solapan en escenarios válidos).
         for (int si = 0; si < stairs.length; si++) {
             Stairs s = stairs[si];
             double zlo = Math.min(s.foot().z(), s.top().z());
             double zhi = Math.max(s.foot().z(), s.top().z());
             if (a.z() < zlo - FLOOR_EPS || a.z() > zhi + FLOOR_EPS) continue;
-            double perp = footprintPerp(s, a.x(), a.y());
-            if (perp >= 0.0 && perp <= s.width() / 2.0 && perp < bestPerp) {
-                best = si;
-                bestPerp = perp;
+            if (s.containsXy(a.x(), a.y())) {
+                return new Loc(true, si);
             }
         }
-        if (best >= 0) {
-            return new Loc(true, best);
-        }
         return new Loc(false, nf); // fallback: planta más cercana
-    }
-
-    /**
-     * Distancia perpendicular de {@code (px,py)} al eje de la escalera si la
-     * proyección cae dentro del tramo ({@code t∈[0,1]}); {@code -1} si cae fuera.
-     */
-    private static double footprintPerp(Stairs s, double px, double py) {
-        Vec3 foot = s.foot();
-        Vec3 top = s.top();
-        double ax = foot.x(), ay = foot.y();
-        double dx = top.x() - ax, dy = top.y() - ay;
-        double len2 = dx * dx + dy * dy;
-        if (len2 == 0.0) {
-            return Math.hypot(px - ax, py - ay);
-        }
-        double t = ((px - ax) * dx + (py - ay) * dy) / len2;
-        if (t < -STAIR_T_EPS || t > 1.0 + STAIR_T_EPS) return -1.0;
-        double cx = ax + t * dx, cy = ay + t * dy;
-        return Math.hypot(px - cx, py - cy);
     }
 
     private static int nearestFloorIndex(double[] floorLevels, double z) {

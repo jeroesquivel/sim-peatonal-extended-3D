@@ -5,14 +5,18 @@ import ar.edu.itba.simped.core.AgentState;
 import ar.edu.itba.simped.core.BehaviorState;
 import ar.edu.itba.simped.core.Neighbor;
 import ar.edu.itba.simped.core.NeighborType;
+import ar.edu.itba.simped.core.Stairs;
 import ar.edu.itba.simped.core.Vec2;
 import ar.edu.itba.simped.core.Vec3;
+import ar.edu.itba.simped.core.ports.Geometry;
 import ar.edu.itba.simped.core.ports.OperationalModel;
 import ar.edu.itba.simped.environment.neighbors.Wall;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Anisotropic Contractile Particle Model with Avoidance (AACPM)
@@ -44,7 +48,32 @@ public final class CpmOperationalModel implements OperationalModel {
     private static final double PRIORITY_TIE_DELTA = 0.5;
     private static final double PRIORITY_EPS = 1e-3;
 
+    /**
+     * Lista <b>global</b> de paredes (todas las plantas), en el mismo orden/espacio
+     * de ids que el {@code FloorAwareNeighborsIndex} (D8). Sirve sólo para resolver
+     * el {@code wallId} de los vecinos {@code WALL} ({@code walls.get(id)}); esos
+     * vecinos ya vienen filtrados por planta desde el CIM.
+     */
     private final List<Wall> walls;
+
+    /**
+     * Paredes por planta (paralelo a {@link #floorLevels}), para el anti-tunneling
+     * geométrico, que debe usar <b>sólo las paredes de la planta actual</b> del
+     * agente (paso 6). {@code null} en el ctor legacy/1-planta → se cae a
+     * {@link #walls} global (comportamiento idéntico al de antes).
+     */
+    private final List<List<Wall>> floorWalls;
+    private final double[] floorLevels;
+
+    /** Escaleras (vacío ⇒ sin física de escalera). */
+    private final List<Stairs> stairs;
+
+    /**
+     * Por cada escalera, la unión de las paredes de las dos plantas que conecta:
+     * anti-tunneling de un agente <b>sobre</b> la escalera (cerca de cualquiera de
+     * los dos descansos). Keyed por identidad de la instancia de {@link Stairs}.
+     */
+    private final Map<Stairs, List<Wall>> stairWalls;
 
     /** Si está activa, el escape en contacto entre agentes es ASIMÉTRICO: el de
      *  mayor "fuerza de decisión" (impulso actual) prevalece y empuja hacia su
@@ -60,19 +89,78 @@ public final class CpmOperationalModel implements OperationalModel {
     private final Double rminOverride;
 
     /**
-     * Constructor with explicit wall list.
-     * Wall avoidance directions will be calculated using exact closest wall geometry.
+     * Constructor con lista de paredes explícita (1 planta / tests). Sin info de
+     * plantas ni escaleras: el anti-tunneling usa la lista global y no hay física
+     * de escalera. Comportamiento idéntico al 2D previo.
      */
     public CpmOperationalModel(List<Wall> walls) {
+        this(walls, null, null, List.of(), Map.of());
+    }
+
+    /**
+     * Constructor multiplanta (paso 6, D9): toma las paredes <b>por planta</b> y
+     * las escaleras desde {@link Geometry}. La lista global de paredes se arma con
+     * el mismo orden que {@code FloorAwareNeighborsIndex.globalWalls} (concatenación
+     * de {@code wallsOn(z)} sobre {@code floors()}) para que los {@code wallId} de
+     * los vecinos resuelvan.
+     */
+    public static CpmOperationalModel fromGeometry(Geometry geometry) {
+        List<Double> floors = geometry.floors();
+        double[] levels = new double[floors.size()];
+        List<List<Wall>> perFloor = new ArrayList<>(floors.size());
+        List<Wall> global = new ArrayList<>();
+        for (int fi = 0; fi < floors.size(); fi++) {
+            double z = floors.get(fi);
+            levels[fi] = z;
+            List<Wall> fw = new ArrayList<>();
+            for (ar.edu.itba.simped.core.Wall cw : geometry.wallsOn(z)) {
+                Wall nw = new Wall(cw.p1(), cw.p2());
+                fw.add(nw);
+                global.add(nw);
+            }
+            perFloor.add(fw);
+        }
+        List<Stairs> stairs = geometry.stairs();
+        Map<Stairs, List<Wall>> stairWalls = new IdentityHashMap<>();
+        for (Stairs s : stairs) {
+            int fa = nearestFloorIndex(levels, s.foot().z());
+            int fb = nearestFloorIndex(levels, s.top().z());
+            List<Wall> union = new ArrayList<>(perFloor.get(fa));
+            if (fb != fa) union.addAll(perFloor.get(fb));
+            stairWalls.put(s, union);
+        }
+        return new CpmOperationalModel(global, levels, perFloor, stairs, stairWalls);
+    }
+
+    private CpmOperationalModel(List<Wall> walls, double[] floorLevels,
+                                List<List<Wall>> floorWalls, List<Stairs> stairs,
+                                Map<Stairs, List<Wall>> stairWalls) {
         if (walls == null) {
             throw new IllegalArgumentException("Walls list cannot be null");
         }
         this.walls = walls;
+        this.floorLevels = floorLevels;
+        this.floorWalls = floorWalls;
+        this.stairs = stairs;
+        this.stairWalls = stairWalls;
         String flag = System.getenv("SIMPED_CPM_PRIORITY");
         this.usePriority = flag != null
                 && (flag.equalsIgnoreCase("on") || flag.equals("1") || flag.equalsIgnoreCase("true"));
         String set = System.getenv("SIMPED_CPM_SET");
         this.rminOverride = (set == null || set.isBlank()) ? null : CpmParameters.bySet(set).rmin();
+    }
+
+    private static int nearestFloorIndex(double[] levels, double z) {
+        int best = 0;
+        double bestDist = Double.POSITIVE_INFINITY;
+        for (int i = 0; i < levels.length; i++) {
+            double d = Math.abs(levels[i] - z);
+            if (d < bestDist) {
+                bestDist = d;
+                best = i;
+            }
+        }
+        return best;
     }
 
     @Override
@@ -101,9 +189,60 @@ public final class CpmOperationalModel implements OperationalModel {
             List<Neighbor> neighbors,
             double dt
     ) {
+        // Paso 6: ¿el agente está sobre una escalera? Si sí, su velocidad deseada
+        // se reduce por speedFactor y, tras mover en el plano, su z se interpola a
+        // lo largo del tramo (D2). El anti-tunneling usa las paredes de la planta
+        // actual (o la unión de las dos plantas de la escalera).
+        Stairs onStair = locateStair(state);
+        double speedScale = onStair != null ? onStair.speedFactor() : 1.0;
+        List<Wall> floorWalls = floorWallsFor(state, onStair);
+
+        integratePlanar(state, footTarget3, behavior, neighbors, dt, speedScale, floorWalls);
+
+        if (onStair != null) {
+            // z = lerp(foot.z, top.z, avance planar): la altura sigue al progreso
+            // (x,y) del agente sobre el eje de la escalera.
+            state.setZ(onStair.zAt(state.x(), state.y()));
+        }
+    }
+
+    /** Escalera sobre la que está el agente (z estrictamente entre sus dos niveles
+     *  y dentro de su huella), o {@code null} si está en una planta plana. */
+    private Stairs locateStair(AgentState s) {
+        if (stairs.isEmpty()) return null;
+        double z = s.z();
+        for (Stairs st : stairs) {
+            double zlo = Math.min(st.foot().z(), st.top().z());
+            double zhi = Math.max(st.foot().z(), st.top().z());
+            if (z <= zlo + Geometry.FLOOR_EPS || z >= zhi - Geometry.FLOOR_EPS) continue;
+            if (st.containsXy(s.x(), s.y())) return st;
+        }
+        return null;
+    }
+
+    /** Paredes a usar para el anti-tunneling de {@code state} este paso. */
+    private List<Wall> floorWallsFor(AgentState state, Stairs onStair) {
+        if (floorWalls == null || floorWalls.isEmpty()) {
+            return walls; // ctor legacy / 1 planta: lista global
+        }
+        if (onStair != null) {
+            return stairWalls.get(onStair);
+        }
+        return floorWalls.get(nearestFloorIndex(floorLevels, state.z()));
+    }
+
+    private void integratePlanar(
+            AgentState state,
+            Vec3 footTarget3,
+            BehaviorState behavior,
+            List<Neighbor> neighbors,
+            double dt,
+            double speedScale,
+            List<Wall> floorWalls
+    ) {
         // La dinámica del CPM es planar (D1): se opera sobre la proyección xy del
-        // foot-target. La z del agente (planta / escalera) la maneja aparte el
-        // paso 6 (interpolación en la escalera), no las fuerzas de este modelo.
+        // foot-target. La z del agente (planta / escalera) la maneja el wrapper
+        // integrate (interpolación en la escalera), no las fuerzas de este modelo.
         Vec2 footTarget = footTarget3 == null ? null : footTarget3.xy();
         AgentProfile profile = state.profile();
         // Experimento Grupo 7: si SIMPED_CPM_SET pidió otro rmin, lo aplicamos acá
@@ -138,9 +277,9 @@ public final class CpmOperationalModel implements OperationalModel {
                 Vec2 toTarget = footTarget.sub(pos);
                 double n = toTarget.norm();
                 if (n > 0.0) {
-                    Vec2 v = toTarget.scale(profile.vd() / n);
+                    Vec2 v = toTarget.scale(profile.vd() * speedScale / n);
                     state.setVelocity(v.x(), v.y());
-                    moveWithWallCheck(state, v, dt);
+                    moveWithWallCheck(state, v, dt, floorWalls);
                 }
             }
             return;
@@ -180,7 +319,7 @@ public final class CpmOperationalModel implements OperationalModel {
             if (overlapping) {
                 // Resolver el solapamiento tiene prioridad sobre avanzar al slot.
                 Vec2 target = pos.add(separation);
-                if (isStepClear(pos, target)) {
+                if (isStepClear(pos, target, floorWalls)) {
                     state.setVelocity(separation.x() / dt, separation.y() / dt);
                     state.setPosition(target.x(), target.y());
                 } else {
@@ -193,7 +332,7 @@ public final class CpmOperationalModel implements OperationalModel {
             double speed = Math.min(QUEUE_APPROACH_SPEED, distToSlot / dt);
             Vec2 v = distToSlot > 1e-9 ? toSlot.scale(speed / distToSlot) : Vec2.ZERO;
             state.setVelocity(v.x(), v.y());
-            moveWithWallCheck(state, v, dt);
+            moveWithWallCheck(state, v, dt, floorWalls);
             return;
         }
 
@@ -353,11 +492,11 @@ public final class CpmOperationalModel implements OperationalModel {
             Vec2 e_a = sumVectors.norm() > 0.0 ? sumVectors.normalized() : e_t;
 
             // Compute desired velocity based on the updated avoidance direction
-            v = desiredVelocity(state, behavior, e_a, profile);
+            v = desiredVelocity(state, behavior, e_a, profile, speedScale);
         }
 
         state.setVelocity(v.x(), v.y());
-        moveWithWallCheck(state, v, dt);
+        moveWithWallCheck(state, v, dt, floorWalls);
     }
 
     /**
@@ -369,11 +508,11 @@ public final class CpmOperationalModel implements OperationalModel {
      * pared infractora; si tampoco, el agente se detiene este paso. Así ninguna
      * combinación de dt grande, velocidad alta o esquinas puede atravesar.
      */
-    private void moveWithWallCheck(AgentState state, Vec2 v, double dt) {
+    private void moveWithWallCheck(AgentState state, Vec2 v, double dt, List<Wall> floorWalls) {
         Vec2 from = new Vec2(state.x(), state.y());
         Vec2 to = new Vec2(from.x() + v.x() * dt, from.y() + v.y() * dt);
 
-        if (isStepClear(from, to)) {
+        if (isStepClear(from, to, floorWalls)) {
             state.setPosition(to.x(), to.y());
             return;
         }
@@ -383,7 +522,7 @@ public final class CpmOperationalModel implements OperationalModel {
         // frente (proyección chica), deslizamos a la VELOCIDAD PLENA del agente
         // en la dirección paralela: así avanza decidido a lo largo del muro y
         // dobla la esquina rápido en vez de verse trabado.
-        Wall blocker = nearestWall(to);
+        Wall blocker = nearestWall(to, floorWalls);
         if (blocker != null) {
             double wx = blocker.p2().x() - blocker.p1().x();
             double wy = blocker.p2().y() - blocker.p1().y();
@@ -396,7 +535,7 @@ public final class CpmOperationalModel implements OperationalModel {
                 // velocidad plena a lo largo de la pared (no la proyección reducida)
                 Vec2 slide = new Vec2(dir * wx / wlen * speed, dir * wy / wlen * speed);
                 Vec2 slideTo = new Vec2(from.x() + slide.x() * dt, from.y() + slide.y() * dt);
-                if (isStepClear(from, slideTo)) {
+                if (isStepClear(from, slideTo, floorWalls)) {
                     state.setVelocity(slide.x(), slide.y());
                     state.setPosition(slideTo.x(), slideTo.y());
                     return;
@@ -405,7 +544,7 @@ public final class CpmOperationalModel implements OperationalModel {
                 // Dirección bloqueada (esquina): probar el sentido opuesto.
                 Vec2 oppSlide = slide.scale(-1.0);
                 Vec2 oppSlideTo = new Vec2(from.x() + oppSlide.x() * dt, from.y() + oppSlide.y() * dt);
-                if (isStepClear(from, oppSlideTo)) {
+                if (isStepClear(from, oppSlideTo, floorWalls)) {
                     state.setVelocity(oppSlide.x(), oppSlide.y());
                     state.setPosition(oppSlideTo.x(), oppSlideTo.y());
                     return;
@@ -417,7 +556,7 @@ public final class CpmOperationalModel implements OperationalModel {
         // ser empujado contra el borde de una puerta): despegarse alejándose
         // perpendicularmente de la pared más cercana. Así sale del filo y en el
         // próximo paso puede re-encarar el hueco en vez de quedar trabado con v=0.
-        Wall nw = nearestWall(from);
+        Wall nw = nearestWall(from, floorWalls);
         if (nw != null) {
             Vec2 cp = nw.closestPointTo(from);
             Vec2 away = from.sub(cp);
@@ -427,7 +566,7 @@ public final class CpmOperationalModel implements OperationalModel {
                 if (speed < 0.05) speed = 0.3;   // siempre un empujón mínimo
                 Vec2 push = away.scale(speed / an);
                 Vec2 pushTo = new Vec2(from.x() + push.x() * dt, from.y() + push.y() * dt);
-                if (isStepClear(from, pushTo)) {
+                if (isStepClear(from, pushTo, floorWalls)) {
                     state.setVelocity(push.x(), push.y());
                     state.setPosition(pushTo.x(), pushTo.y());
                     return;
@@ -447,8 +586,8 @@ public final class CpmOperationalModel implements OperationalModel {
      * paralelo no lo deja rodear el endpoint y queda clavado con v=0). Sólo
      * bloqueamos el atravesamiento real (cruce de segmento).
      */
-    private boolean isStepClear(Vec2 from, Vec2 to) {
-        for (Wall w : walls) {
+    private boolean isStepClear(Vec2 from, Vec2 to, List<Wall> floorWalls) {
+        for (Wall w : floorWalls) {
             if (segmentsIntersect(from, to, w.p1(), w.p2())) {
                 return false;
             }
@@ -457,10 +596,10 @@ public final class CpmOperationalModel implements OperationalModel {
     }
 
     /** Pared más cercana al punto {@code p} (para elegir sobre cuál deslizar). */
-    private Wall nearestWall(Vec2 p) {
+    private Wall nearestWall(Vec2 p, List<Wall> floorWalls) {
         Wall best = null;
         double bestD = Double.MAX_VALUE;
-        for (Wall w : walls) {
+        for (Wall w : floorWalls) {
             double d = w.distanceTo(p);
             if (d < bestD) {
                 bestD = d;
@@ -711,7 +850,8 @@ public final class CpmOperationalModel implements OperationalModel {
         return dir.scale(mag);
     }
 
-    private Vec2 desiredVelocity(AgentState state, BehaviorState behavior, Vec2 e_a, AgentProfile profile) {
+    private Vec2 desiredVelocity(AgentState state, BehaviorState behavior, Vec2 e_a,
+                                 AgentProfile profile, double speedScale) {
         double range = profile.rmax() - profile.rmin();
         double frac = range > 0.0 ? (state.radius() - profile.rmin()) / range : 1.0;
         if (frac < 0.0) frac = 0.0;
@@ -721,6 +861,8 @@ public final class CpmOperationalModel implements OperationalModel {
         if (behavior == BehaviorState.APPROACHING) {
             vdMax *= 0.3;
         }
+        // Paso 6: velocidad reducida sobre la escalera (speedScale = speedFactor).
+        vdMax *= speedScale;
 
         double magnitude = vdMax * Math.pow(frac, profile.beta());
         return e_a.scale(magnitude);

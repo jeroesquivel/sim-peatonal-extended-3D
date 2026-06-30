@@ -34,7 +34,6 @@ import ar.edu.itba.simped.environment.generator.ConfigurablePedestrianGenerator;
 import ar.edu.itba.simped.environment.generator.GenerationMode;
 import ar.edu.itba.simped.environment.graph.StubGraph;
 import ar.edu.itba.simped.environment.neighbors.FloorAwareNeighborsIndex;
-import ar.edu.itba.simped.environment.neighbors.Wall;
 import ar.edu.itba.simped.scenario.AgentAssembler;
 import ar.edu.itba.simped.scenario.CompositePedestrianGenerator;
 import ar.edu.itba.simped.scenario.ServersWiring;
@@ -106,11 +105,10 @@ public final class App {
 
         // Se usa siempre CPM (D7: SFM eliminado). El omChoice se conserva por
         // compatibilidad de CLI pero cualquier valor resuelve a CPM.
-        // Lista global de paredes (D8): el mismo orden/espacio de ids que usa el
-        // FloorAwareNeighborsIndex, para que el OM resuelva los wallId de los vecinos.
-        List<Wall> cimWalls = FloorAwareNeighborsIndex.globalWalls(geometry);
+        // OM multiplanta (D9): toma paredes por planta + escaleras desde Geometry.
+        // Su lista global de paredes coincide en orden/ids con la del CIM (D8).
         AgentProfile profile = CpmParameters.baglietoParisiSet1();
-        OperationalModel om = new CpmOperationalModel(cimWalls);
+        OperationalModel om = CpmOperationalModel.fromGeometry(geometry);
 
         // El dt efectivo lo acota el OM: usamos min(dt del escenario, dt que el
         // modelo considera estable para este profile). Así el escenario no fuerza

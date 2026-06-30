@@ -284,3 +284,58 @@ paredes para su anti-tunneling, pero **filtra por planta del agente** queda para
 de la planta actual). Posible cleanup futuro: que el `Neighbor` de pared lleve la geometría en el
 payload y el OM deje de depender de un espacio de ids compartido.
 
+---
+
+## D9 — CPM 3D: OM cableado desde `Geometry` (paredes por planta + escaleras), velocidad reducida e interpolación de z en la escalera
+
+- **Fecha:** 2026-06-30
+- **Estado:** vigente
+- **Paso del plan:** 6 (CPM: z en escaleras + velocidad reducida + paredes de la planta actual)
+
+**Contexto.** El `CpmOperationalModel` recibía sólo una `List<Wall>` (global, plana, sin `z`) y
+la usaba para todo: (a) resolver el `wallId` de los vecinos `WALL` (`walls.get(id)`), y (b) el
+anti-tunneling geométrico (`moveWithWallCheck`/`isStepClear`/`nearestWall`, que iteran **todas**
+las paredes). El enunciado pide que el anti-tunneling use **sólo las paredes de la planta actual**,
+que en la **escalera la velocidad sea menor**, y que al subir se **actualice la `z`** interpolando
+por el avance. El OM no conocía plantas ni escaleras.
+
+**Decisión.**
+- **Nuevo factory `CpmOperationalModel.fromGeometry(Geometry)`** (App lo usa). Precomputa:
+  - `floorWalls` = paredes **por planta** (`wallsOn(z)` por cada `floors()`), `floorLevels` paralelo;
+  - lista **global** de paredes = concatenación de `wallsOn(z)` sobre `floors()` — **mismo orden/ids
+    que `FloorAwareNeighborsIndex` (D8)**, para que `walls.get(neighborId)` resuelva;
+  - `stairs` (de `geometry.stairs()`) y, por escalera, la **unión de paredes de las dos plantas que
+    conecta** (anti-tunneling del agente sobre la escalera, cerca de cualquiera de los dos descansos).
+  - Se **conserva** el ctor `CpmOperationalModel(List<Wall>)` para 1 planta / tests: sin info de
+    plantas ni escaleras → anti-tunneling sobre la lista global y sin física de escalera
+    (comportamiento idéntico al 2D previo).
+- **Resolución de id de pared:** sigue contra la lista **global** (`this.walls`); esos vecinos ya
+  vienen filtrados por planta desde el CIM (D8). **Sólo** el anti-tunneling geométrico pasa a usar
+  las paredes de la planta actual (`floorWalls.get(floorOf(z))`), o la unión de las dos plantas si
+  el agente está sobre una escalera.
+- **Detección "sobre escalera" (runtime):** `locateStair(state)` = primera escalera cuya `z` el
+  agente tiene **estrictamente entre** los dos niveles del tramo (±`FLOOR_EPS`) y cuya **huella**
+  (`Stairs.containsXy`) contiene `(x,y)`. No necesita `floors()`: usa los extremos de la propia
+  escalera (coinciden con las plantas que conecta). En el pie/tope exactos el agente es de planta.
+- **Velocidad reducida:** sobre la escalera, `speedScale = stair.speedFactor()` multiplica la
+  velocidad deseada (en `desiredVelocity` y en el branch LEAVING). El escape por contacto (`ve`) y
+  el snapping de cola quedan sin escalar (seguridad física / no aplican en escalera).
+- **Interpolación de z (D2):** el `integrate` público es un wrapper que (1) detecta la escalera,
+  (2) corre la dinámica **planar** (`integratePlanar`, el cuerpo de antes) y (3) si el agente está
+  sobre una escalera, setea `z = stair.zAt(x, y) = lerp(foot.z, top.z, avance_planar)`. La `z` no es
+  grado de libertad dinámico: surge del progreso `(x,y)` sobre el eje.
+- **Primitivas reutilizables en `core/Stairs`:** `containsXy`, `progressAt`, `zAt` — las usan tanto
+  el OM como el `FloorAwareNeighborsIndex` (se eliminó la geometría duplicada `footprintPerp` del
+  facade; ahora clasifica con `containsXy`).
+
+**Alternativas descartadas:**
+- *Taggear `neighbors.Wall` con `z` y filtrar la lista global por planta en runtime*: evita la
+  dependencia de `Geometry` pero el OM **igual** necesita las escaleras (speedFactor + z) → habría
+  que pasarlas aparte; `fromGeometry` es la fuente única más limpia.
+- *`vz` / integración vertical*: descartado en D2; la `z` se interpola, no se integra.
+- *Anti-tunneling del agente en escalera contra una sola planta*: se eligió la **unión** de las dos
+  plantas para no tunelear los muros de ninguno de los dos descansos al entrar/salir del tramo.
+
+**Motivo.** Cumple el enunciado (anti-tunneling por planta, velocidad reducida e interpolación de z
+en la escalera) manteniendo CPM como único modelo y el espacio de ids de pared consistente con D8.
+

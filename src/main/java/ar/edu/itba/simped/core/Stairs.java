@@ -65,4 +65,47 @@ public record Stairs(String blockName, Vec3 foot, Vec3 top, double width, double
         double t = Math.max(0.0, Math.min(1.0, progress));
         return foot.add(top.sub(foot).scale(t));
     }
+
+    /**
+     * Avance del agente a lo largo del tramo: proyecta {@code (px,py)} sobre el
+     * eje planar y devuelve el parámetro recortado a {@code [0,1]} (pie {@code 0}
+     * → tope {@code 1}). Reutilizado por el CIM (clasificación por planta) y el
+     * CPM (interpolación de {@code z} en la escalera).
+     */
+    public double progressAt(double px, double py) {
+        double ax = foot.x(), ay = foot.y();
+        double dx = top.x() - ax, dy = top.y() - ay;
+        double len2 = dx * dx + dy * dy;
+        if (len2 == 0.0) return 0.0;
+        double t = ((px - ax) * dx + (py - ay) * dy) / len2;
+        return Math.max(0.0, Math.min(1.0, t));
+    }
+
+    /**
+     * Altura {@code z} interpolada según el avance horizontal de {@code (px,py)}
+     * a lo largo del tramo ({@code z = lerp(foot.z, top.z, progressAt)}). Es la
+     * regla de D2: la {@code z} no es grado de libertad dinámico, surge del
+     * progreso planar en la escalera.
+     */
+    public double zAt(double px, double py) {
+        return foot.z() + (top.z() - foot.z()) * progressAt(px, py);
+    }
+
+    /**
+     * ¿El punto planar {@code (px,py)} cae dentro de la huella del tramo? Es
+     * decir, su proyección sobre el eje cae en {@code [0,1]} y su distancia
+     * perpendicular al eje es {@code ≤ width/2}.
+     */
+    public boolean containsXy(double px, double py) {
+        double ax = foot.x(), ay = foot.y();
+        double dx = top.x() - ax, dy = top.y() - ay;
+        double len2 = dx * dx + dy * dy;
+        if (len2 == 0.0) {
+            return Math.hypot(px - ax, py - ay) <= width / 2.0;
+        }
+        double t = ((px - ax) * dx + (py - ay) * dy) / len2;
+        if (t < 0.0 || t > 1.0) return false;
+        double cx = ax + t * dx, cy = ay + t * dy;
+        return Math.hypot(px - cx, py - cy) <= width / 2.0;
+    }
 }
