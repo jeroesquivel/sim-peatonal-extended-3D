@@ -4,7 +4,7 @@
 Uso:
     python3 tools/animate_run.py <scenario_dir> <output.csv> <anim.mp4> [stride]
 
-El output.csv es el que escribe App.java (t; x; y; vx; vy; state; id).
+El output.csv es el que escribe App.java (t; x; y; z; vx; vy; state; id).
 `stride` submuestrea frames (default 5 → un frame cada 0.5 s con dt_out=0.1).
 """
 
@@ -87,16 +87,17 @@ def is_green(t, period, green, offset):
 
 def read_run(path):
     frames = defaultdict(list)
-    with open(path) as f:
+    with open(path, encoding="utf-8-sig") as f:
         for line in f:
             parts = [p.strip() for p in line.split(";")]
-            if len(parts) < 6:
+            if len(parts) < 7:
                 continue
             try:
                 t = float(parts[0])
             except ValueError:
                 continue
-            frames[t].append((float(parts[1]), float(parts[2]), parts[5]))
+            # Formato D10: tout; x; y; z; vx; vy; state; id
+            frames[t].append((float(parts[1]), float(parts[2]), parts[6]))
     return [frames[t] for t in sorted(frames)], sorted(frames)
 
 

@@ -66,7 +66,10 @@ Para escenarios en **Formato B** (`parameters.json`) hace falta Jackson en el cl
 ### Visualización
 
 - `tools/visualize_simulation.py` — anima `out/output.csv` sobre el escenario (2D, círculos
-  coloreados por estado). Requiere `pip install matplotlib pillow`.
+  coloreados por estado). Requiere `pip install matplotlib pillow`. Opción `--floor <z>` para
+  animar una sola planta (paredes + agentes de esa `z`).
+- `tools/visualize_simulation_3d.py` — vista 3D a 45° con las plantas apiladas (paredes a su `z`,
+  agentes como puntos en `(x,y,z)`, escaleras como segmento inclinado). Lee `STAIRS.csv` si existe.
 - `tools/animate_run.py` — animación alternativa.
 - Debug de ruteo: `-Dsimped.hopLog=out/hops.csv` registra cada `nextVisibleHop` para
   superponer los hops sobre el GIF.
@@ -144,8 +147,9 @@ Params: `SIM_PARAMS.csv` (dt, dt_out, t_total), `GENERATOR_PARAMS.csv`, `SERVER_
 con `target_type ∈ {TARGET, SERVER, EXIT}`).
 
 ### Output — `out/output.csv`
-Una fila por agente por output step: `tout; x; y; vx; vy; state; id` (sep `; `, sin header,
-`Locale.US`). **No tiene `z`** → habrá que agregarlo para la animación 3D.
+Una fila por agente por output step: `tout; x; y; z; vx; vy; state; id` (sep `; `, sin header,
+`Locale.US`). La `z` (planta / altura en escalera) va junto a `x, y` (ver D10). Los scripts
+Python leen este formato.
 
 ---
 

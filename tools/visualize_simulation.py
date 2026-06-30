@@ -39,7 +39,15 @@ STATE_COLORS = {
 TRACK_COLORS = ["#e74c3c", "#9b59b6", "#1abc9c", "#f39c12", "#34495e", "#16a085"]
 
 
-def parse_walls(path: str) -> list[tuple[float, float, float, float]]:
+FLOOR_EPS = 1e-6
+
+
+def _floor_match(z: float, floor: float | None) -> bool:
+    return floor is None or abs(z - floor) <= 1e-6
+
+
+def parse_walls(path: str, floor: float | None = None) -> list[tuple[float, float, float, float]]:
+    # WALLS.csv: x1, y1, z1, x2, y2, z2. Con `floor` se filtran las paredes de esa planta.
     walls = []
     with open(path, newline="", encoding="utf-8") as f:
         reader = csv.reader(f)
@@ -47,11 +55,15 @@ def parse_walls(path: str) -> list[tuple[float, float, float, float]]:
         for row in reader:
             if not row or not row[0].strip():
                 continue
+            z = float(row[2])
+            if not _floor_match(z, floor):
+                continue
             walls.append((float(row[0]), float(row[1]), float(row[3]), float(row[4])))
     return walls
 
 
-def parse_servers(path: str) -> list[tuple[str, float, float, float, float]]:
+def parse_servers(path: str, floor: float | None = None) -> list[tuple[str, float, float, float, float]]:
+    # SERVERS.csv: block_name, x1, y1, z1, x2, y2, z2. `floor` filtra por planta (z1).
     if not os.path.isfile(path):
         return []
     servers = []
@@ -63,6 +75,8 @@ def parse_servers(path: str) -> list[tuple[str, float, float, float, float]]:
                 continue
             name = row[0].strip()
             if not name.endswith("_SERVER"):
+                continue
+            if not _floor_match(float(row[3]), floor):
                 continue
             servers.append((name, float(row[1]), float(row[2]), float(row[4]), float(row[5])))
     return servers
@@ -109,23 +123,29 @@ def is_visible(a: tuple[float, float], b: tuple[float, float], walls: list[tuple
     return True
 
 
-def parse_sim_output(path: str) -> dict[float, list[dict]]:
+def parse_sim_output(path: str, floor: float | None = None) -> dict[float, list[dict]]:
+    # Formato D10: tout; x; y; z; vx; vy; state; id. Con `floor` se quedan sólo
+    # los agentes de esa planta (z ≈ floor).
     frames: dict[float, list[dict]] = defaultdict(list)
-    with open(path, newline="", encoding="utf-8") as f:
+    with open(path, newline="", encoding="utf-8-sig") as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
             parts = [p.strip() for p in line.split(";")]
-            if len(parts) < 6:
+            if len(parts) < 7:
                 continue
             tout = float(parts[0])
+            z = float(parts[3])
+            if not _floor_match(z, floor):
+                continue
             frames[tout].append({
                 "x": float(parts[1]),
                 "y": float(parts[2]),
-                "vx": float(parts[3]),
-                "vy": float(parts[4]),
-                "state": parts[5],
+                "z": z,
+                "vx": float(parts[4]),
+                "vy": float(parts[5]),
+                "state": parts[6],
             })
     return dict(sorted(frames.items()))
 
@@ -415,8 +435,8 @@ def render_video(
     print(f"Guardado: {out_path}")
 
 
-def load_frames_with_times(path: str) -> list[list[dict]]:
-    raw = parse_sim_output(path)
+def load_frames_with_times(path: str, floor: float | None = None) -> list[list[dict]]:
+    raw = parse_sim_output(path, floor)
     times = sorted(raw.keys())
     tracked = track_agents(raw)
     for t, frame in zip(times, tracked):
@@ -439,15 +459,17 @@ def main():
     parser.add_argument("--fps", type=int, default=10, help="Frames por segundo del video")
     parser.add_argument("--dpi", type=int, default=120)
     parser.add_argument("--format", choices=("gif", "mp4"), default=None)
+    parser.add_argument("--floor", type=float, default=None,
+                        help="Planta (z) a animar en 2D; omitir para mostrar todas superpuestas")
     args = parser.parse_args()
 
     fmt = args.format or ("mp4" if args.out.lower().endswith(".mp4") else "gif")
     walls_path = os.path.join(args.scenario, "WALLS.csv")
     servers_path = os.path.join(args.scenario, "SERVERS.csv")
 
-    frames = load_frames_with_times(args.output)
-    walls = parse_walls(walls_path)
-    servers = parse_servers(servers_path)
+    frames = load_frames_with_times(args.output, args.floor)
+    walls = parse_walls(walls_path, args.floor)
+    servers = parse_servers(servers_path, args.floor)
 
     hops_by_track: dict[int, list[dict]] | None = None
     hop_list = parse_hops(args.hops) if args.hops else []

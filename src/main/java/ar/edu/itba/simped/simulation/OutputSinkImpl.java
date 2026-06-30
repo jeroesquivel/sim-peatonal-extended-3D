@@ -12,9 +12,10 @@ import java.util.Locale;
 
 /**
  * Implementación del módulo 3 (Output). Escribe una fila por agente por
- * output step con formato {@code tout; x; y; vx; vy; state; id}.
- * Sin header. Coordenadas con punto decimal (Locale.US). El {@code id} va
- * último para no romper a quien lee las columnas 0-5 por índice.
+ * output step con formato {@code tout; x; y; z; vx; vy; state; id} (D10).
+ * Sin header. Coordenadas con punto decimal (Locale.US). La {@code z} (planta /
+ * altura en escalera) va junto a {@code x, y} para representar la posición 3D;
+ * el {@code id} va último para trazar trayectorias por agente.
  */
 public final class OutputSinkImpl implements OutputSink {
 
@@ -56,11 +57,12 @@ public final class OutputSinkImpl implements OutputSink {
     }
 
     private static String formatRow(double tout, AgentState agent) {
-        // id al final: permite trazar trayectorias por agente sin romper a los
-        // consumidores que leen t;x;y;vx;vy;state por índice (0-5).
+        // Formato D10: tout; x; y; z; vx; vy; state; id. La z agrupada con x,y
+        // (posición 3D); id al final para trazar trayectorias por agente.
         return String.format(Locale.US,
-                "%.4f" + SEPARATOR + "%.6f" + SEPARATOR + "%.6f" + SEPARATOR
+                "%.4f" + SEPARATOR + "%.6f" + SEPARATOR + "%.6f" + SEPARATOR + "%.6f" + SEPARATOR
                         + "%.6f" + SEPARATOR + "%.6f" + SEPARATOR + "%s" + SEPARATOR + "%d",
-                tout, agent.x(), agent.y(), agent.vx(), agent.vy(), agent.state().name(), agent.id());
+                tout, agent.x(), agent.y(), agent.z(), agent.vx(), agent.vy(),
+                agent.state().name(), agent.id());
     }
 }

@@ -339,3 +339,31 @@ por el avance. El OM no conocía plantas ni escaleras.
 **Motivo.** Cumple el enunciado (anti-tunneling por planta, velocidad reducida e interpolación de z
 en la escalera) manteniendo CPM como único modelo y el espacio de ids de pared consistente con D8.
 
+---
+
+## D10 — Output con `z`: columna nueva tras `y` (`tout; x; y; z; vx; vy; state; id`)
+
+- **Fecha:** 2026-06-30
+- **Estado:** vigente
+- **Paso del plan:** 7 (output con z + animación 3D)
+
+**Contexto.** El output era `tout; x; y; vx; vy; state; id` (sep `; `, sin header, `Locale.US`).
+No tenía `z`, así que la animación no puede ubicar al agente en su planta. Hay que agregar `z`.
+Los consumidores (scripts `tools/visualize_simulation.py`, `tools/animate_run.py`) parsean por
+**índice de columna**.
+
+**Decisión.** Se inserta `z` **inmediatamente después de `y`**:
+`tout; x; y; z; vx; vy; state; id`. Agrupa la posición 3D `(x,y,z)` y deja la velocidad planar
+`(vx,vy)` junta. Se actualizan los dos scripts Python (que de todas formas debían cambiar para la
+vista 3D). No hay test Java que fije el formato (el test del driver usa un `OutputSink` propio); se
+agrega uno nuevo que verifica la fila.
+
+**Alternativas descartadas:**
+- *Agregar `z` al final tras `id`* (`…; state; id; z`): no rompe los índices 0-6 de consumidores
+  viejos, pero separa `z` de `x,y` (la posición queda partida) y rompe igual el invariante "id al
+  final". Como controlamos todos los consumidores, se prefirió el orden canónico.
+- *`vz` en el output*: no se modela `vz` (D2); sólo se agrega `z`.
+
+**Motivo.** Representación natural de la posición 3D; el costo de actualizar los scripts es bajo y
+ya era necesario para la vista 3D.
+
