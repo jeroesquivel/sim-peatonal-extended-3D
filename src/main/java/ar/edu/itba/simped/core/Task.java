@@ -18,9 +18,19 @@ public final class Task implements TaskTarget {
     private final double dwellSeconds;
     private final Segment exitSegment;
     private final List<Vec2> locationCandidates;
+    /**
+     * Planta de cada candidato de un location-group (paralela a
+     * {@link #locationCandidates}). Permite que un grupo abarque varias plantas
+     * (p. ej. aulas en PB y P1): al resolver el candidato, {@link #z()} pasa a
+     * devolver la planta del candidato elegido, no la del primero. {@code null}
+     * en tasks de target único.
+     */
+    private final List<Double> candidateZs;
     private final ObjectiveSelection locationSelection;
     private final long locationSelectionSeed;
     private Vec2 resolvedLocationTarget;
+    /** Planta del candidato resuelto (location-group multiplanta); null si no resuelto. */
+    private Double resolvedZ;
 
     public Task(
             TaskType type,
@@ -33,6 +43,22 @@ public final class Task implements TaskTarget {
             long locationSelectionSeed,
             double z
     ) {
+        this(type, target, targetRef, dwellSeconds, exitSegment, locationCandidates,
+                locationSelection, locationSelectionSeed, z, null);
+    }
+
+    public Task(
+            TaskType type,
+            Vec2 target,
+            String targetRef,
+            double dwellSeconds,
+            Segment exitSegment,
+            List<Vec2> locationCandidates,
+            ObjectiveSelection locationSelection,
+            long locationSelectionSeed,
+            double z,
+            List<Double> candidateZs
+    ) {
         this.status = TaskStatus.PENDING;
         this.type = type;
         this.target = target;
@@ -41,6 +67,7 @@ public final class Task implements TaskTarget {
         this.dwellSeconds = dwellSeconds;
         this.exitSegment = exitSegment;
         this.locationCandidates = locationCandidates == null ? List.of() : List.copyOf(locationCandidates);
+        this.candidateZs = candidateZs == null ? null : List.copyOf(candidateZs);
         this.locationSelection = locationSelection;
         this.locationSelectionSeed = locationSelectionSeed;
     }
@@ -120,6 +147,36 @@ public final class Task implements TaskTarget {
             long selectionSeed,
             double z
     ) {
+        return locationGroup(groupRef, candidates, null, selection, dwellSeconds, selectionSeed, z);
+    }
+
+    /**
+     * Location-group con la planta de cada candidato ({@code candidateZs} paralela
+     * a {@code candidates}). Cuando el grupo abarca varias plantas, la {@code z}
+     * efectiva ({@link #z()}) sigue al candidato resuelto. Si {@code candidateZs}
+     * es null se usa la planta única {@code z} (comportamiento de una sola planta).
+     */
+    public static Task locationGroup(
+            String groupRef,
+            List<Vec2> candidates,
+            List<Double> candidateZs,
+            ObjectiveSelection selection,
+            double dwellSeconds,
+            long selectionSeed
+    ) {
+        double z = candidateZs == null || candidateZs.isEmpty() ? 0.0 : candidateZs.get(0);
+        return locationGroup(groupRef, candidates, candidateZs, selection, dwellSeconds, selectionSeed, z);
+    }
+
+    private static Task locationGroup(
+            String groupRef,
+            List<Vec2> candidates,
+            List<Double> candidateZs,
+            ObjectiveSelection selection,
+            double dwellSeconds,
+            long selectionSeed,
+            double z
+    ) {
         if (candidates == null || candidates.isEmpty()) {
             throw new IllegalArgumentException("location group requires at least one candidate");
         }
@@ -135,14 +192,15 @@ public final class Task implements TaskTarget {
                 candidates,
                 selection,
                 selectionSeed,
-                z
+                z,
+                candidateZs
         );
     }
 
     public TaskType type() { return type; }
     public Vec2 target() { return resolvedLocationTarget != null ? resolvedLocationTarget : target; }
-    /** Planta del target (0 = planta baja). */
-    public double z() { return z; }
+    /** Planta del target (0 = planta baja). En location-groups multiplanta, la del candidato resuelto. */
+    public double z() { return resolvedZ != null ? resolvedZ : z; }
     public String targetRef() { return targetRef; }
     public double dwellSeconds() { return dwellSeconds; }
     public Segment exitSegment() { return exitSegment; }
@@ -150,7 +208,36 @@ public final class Task implements TaskTarget {
     public ObjectiveSelection locationSelection() { return locationSelection; }
     public long locationSelectionSeed() { return locationSelectionSeed; }
     public boolean hasLocationChoices() { return type == TaskType.LOCATION && !locationCandidates.isEmpty(); }
-    public void resolveLocationTarget(Vec2 resolvedLocationTarget) { this.resolvedLocationTarget = resolvedLocationTarget; }
+
+    /**
+     * Fija el candidato elegido del location-group. Si el grupo trae planta por
+     * candidato ({@code candidateZs}), también actualiza la planta efectiva para
+     * que el footTarget viva en la planta del candidato resuelto (ruteo 3D).
+     */
+    public void resolveLocationTarget(Vec2 resolvedLocationTarget) {
+        this.resolvedLocationTarget = resolvedLocationTarget;
+        if (candidateZs != null) {
+            int idx = locationCandidates.indexOf(resolvedLocationTarget);
+            if (idx >= 0 && idx < candidateZs.size()) {
+                this.resolvedZ = candidateZs.get(idx);
+            }
+        }
+    }
+
+    /**
+     * Fija el candidato elegido por su <b>índice</b>. Es la forma correcta cuando
+     * los candidatos comparten {@code (x,y)} y solo difieren en planta (aulas de
+     * PB/P1 una sobre otra): el índice resuelve la planta sin ambigüedad.
+     */
+    public void resolveLocationTarget(int index) {
+        if (index < 0 || index >= locationCandidates.size()) {
+            return;
+        }
+        this.resolvedLocationTarget = locationCandidates.get(index);
+        if (candidateZs != null && index < candidateZs.size()) {
+            this.resolvedZ = candidateZs.get(index);
+        }
+    }
     public TaskStatus status() { return status; }
     public void setStatus(TaskStatus status) { this.status = status; }
 }

@@ -193,7 +193,7 @@ public final class CpmOperationalModel implements OperationalModel {
         // se reduce por speedFactor y, tras mover en el plano, su z se interpola a
         // lo largo del tramo (D2). El anti-tunneling usa las paredes de la planta
         // actual (o la unión de las dos plantas de la escalera).
-        Stairs onStair = locateStair(state);
+        Stairs onStair = locateStair(state, footTarget3);
         double speedScale = onStair != null ? onStair.speedFactor() : 1.0;
         List<Wall> floorWalls = floorWallsFor(state, onStair);
 
@@ -206,16 +206,27 @@ public final class CpmOperationalModel implements OperationalModel {
         }
     }
 
-    /** Escalera sobre la que está el agente (z estrictamente entre sus dos niveles
-     *  y dentro de su huella), o {@code null} si está en una planta plana. */
-    private Stairs locateStair(AgentState s) {
+    /**
+     * Escalera que el agente está <b>recorriendo</b>, o {@code null} si está en una
+     * planta plana. El agente recorre el tramo {@code st} si está sobre su huella
+     * ({@link Stairs#containsXy}) y, además, o bien su {@code z} ya está entre las dos
+     * plantas (a mitad de escalera), o bien su {@code footTarget} apunta a otra planta
+     * (acaba de pisar el pie/tope y va a cruzar). Esto último distingue "subir/bajar"
+     * de "cruzar la huella en horizontal sobre una planta" (mismo {@code z} que el
+     * footTarget → no se interpola z).
+     */
+    private Stairs locateStair(AgentState s, Vec3 footTarget) {
         if (stairs.isEmpty()) return null;
         double z = s.z();
         for (Stairs st : stairs) {
+            if (!st.containsXy(s.x(), s.y())) continue;
             double zlo = Math.min(st.foot().z(), st.top().z());
             double zhi = Math.max(st.foot().z(), st.top().z());
-            if (z <= zlo + Geometry.FLOOR_EPS || z >= zhi - Geometry.FLOOR_EPS) continue;
-            if (st.containsXy(s.x(), s.y())) return st;
+            if (z < zlo - Geometry.FLOOR_EPS || z > zhi + Geometry.FLOOR_EPS) continue;
+            boolean midStair = z > zlo + Geometry.FLOOR_EPS && z < zhi - Geometry.FLOOR_EPS;
+            boolean headingAcross = footTarget != null
+                    && Math.abs(footTarget.z() - z) > Geometry.FLOOR_EPS;
+            if (midStair || headingAcross) return st;
         }
         return null;
     }

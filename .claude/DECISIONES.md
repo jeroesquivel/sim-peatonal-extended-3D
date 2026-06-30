@@ -367,3 +367,79 @@ agrega uno nuevo que verifica la fila.
 **Motivo.** Representación natural de la posición 3D; el costo de actualizar los scripts es bajo y
 ya era necesario para la vista 3D.
 
+---
+
+## D11 — Ruteo multiplanta end-to-end: 4 fixes que expuso el escenario Escuela
+
+- **Fecha:** 2026-06-30
+- **Estado:** vigente
+- **Paso del plan:** 8 (escenario Escuela; cierra integración de pasos 4–6)
+
+**Contexto.** Al correr el primer escenario real de 2 plantas (Escuela), **ningún agente subía a
+P1** (`maxz=0`) pese a que geometría, plan y grafo se cargaban bien por separado. La depuración
+(grafo aislado vs. simulación completa) reveló **cuatro** gaps de integración del soporte 3D, cada
+uno enmascarando al siguiente:
+
+**Decisión (fixes aplicados).**
+1. **`Task` location-group multiplanta** (`core/Task`, `scenario/AgentAssembler`): la `z` del Task
+   se tomaba del **primer** candidato del grupo (`candidates.get(0).z()`). Un grupo "AULA" con aulas
+   en PB y P1 quedaba clavado en `z=0`. → El Task ahora lleva la **planta por candidato**
+   (`candidateZs`) y `z()` devuelve la del candidato **resuelto**.
+2. **Selección por índice** (`core/LocationTargetSelector`, `core/Task`, `agent/statemachine`):
+   las aulas de PB y P1 comparten `(x,y)` (una sobre otra), así que los candidatos `Vec2` tienen
+   **duplicados** y `indexOf(resuelto)` colapsaba la planta a la primera (PB). → Se agrega
+   `chooseIndex(...)` que devuelve el **índice** elegido y `Task.resolveLocationTarget(int)` resuelve
+   la planta por índice (sin ambigüedad de `(x,y)`).
+3. **Grafo: cruce de la arista de escalera** (`environment/graph/NavigationGraph`): `nextVisibleHop`
+   ruteaba hasta el **pie** de la escalera y se quedaba ahí (el tope, en otra planta, "no es visible",
+   y el FVP no avanzaba → hop == pos, estancado); además un agente **ya sobre** la escalera no veía
+   ningún nodo. → (a) el FVP **avanza al tope** cuando el agente llega al pie (`STAIR_FOOT_REACH`); (b)
+   un agente sobre la huella de una escalera (z entre plantas) recibe como hop el **extremo hacia la
+   planta del target** (`stairTraversalHop`). Se precomputan aristas de escalera (nodos en plantas
+   distintas) y niveles de planta.
+4. **OM: arranque de la interpolación de z** (`agent/om/CpmOperationalModel`): `locateStair` exigía
+   `z` **estrictamente entre** plantas, pero al pisar el pie el agente está en `z=0` (= nivel de
+   planta) → no se detectaba "en escalera" y la `z` nunca arrancaba (el agente cruzaba la huella a
+   `z=0`). → `locateStair(state, footTarget)` detecta "recorriendo" si está sobre la huella **y** (su
+   `z` ya está entre plantas **o** su `footTarget` apunta a otra planta). El footTarget cruzando de
+   planta distingue "subir/bajar" de "cruzar la huella en horizontal".
+
+**Resultado.** En la Escuela (~100 agentes, plan AULA→EXIT con aulas en ambas plantas), ~60% resuelve
+un aula de P1, sube por una escalera (z interpolada 0→3), asiste la clase y baja a una salida.
+
+**Motivo.** Los pasos 4 (grafo), 5 (CIM) y 6 (CPM) estaban verdes en aislamiento pero su integración
+multiplanta recién se ejercitó con un escenario real de 2 plantas; estos 4 fixes la cierran.
+
+---
+
+## D12 — Escenario Escuela: Formato B + builder paramétrico
+
+- **Fecha:** 2026-06-30
+- **Estado:** vigente
+- **Paso del plan:** 8
+
+**Contexto.** Hay que construir el escenario Escuela (≥2 plantas, aulas, pasillos, escaleras, recreo
+con kiosco) y, sobre él, los sub-escenarios Evacuación e Ingreso.
+
+**Decisión.**
+- **Formato B** (`parameters.json`) — como el `scenarios/ejemplo-aeropuerto` de referencia: habilita
+  `exit_selection` (elegir salida), `objective_selection` (CLOSEST/RANDOM por grupo) y targets con
+  `attending_time` (aulas como dwell), todo necesario para el escenario. Geometría en los CSV con `z`
+  + `STAIRS.csv`; params/planes en JSON (dt = default, `output_delta_time`/`max_time` del JSON).
+- **Builder paramétrico** `tools/scenarios-builders/build_escuela.py` (emite los CSV + JSON) en vez de
+  escribir a mano ~55 paredes en 2 plantas; permite variar dimensiones/cantidades para los
+  sub-escenarios (8.2) sin reescribir todo.
+- **Geometría** (mapa cuadrado 60×60): recreo izquierda (`x 0..30`, z=0, kiosco en esquina + salida
+  RECREO); edificio derecha (`x 30..60`, PB z=0 / P1 z=3) alargado en y, pasillo vertical central que
+  separa 4 aulas a cada lado por planta (16 aulas), **dos escaleras** en las puntas (`y≈0` e `y≈60`)
+  conectando PB↔P1, salida EDIFICIO_PB en PB, y comunicación PB↔recreo por las dos esquinas. La P1 no
+  tiene salida propia (se evacúa bajando).
+- **Aulas** = TARGETS con `attending_time` (dwell de clase). **Kiosco** = server `queue`
+  (`KIOSCO_1_SERVER` + `KIOSCO_1_QUEUE000`). El plan baseline es AULA→EXIT (el kiosco queda en la
+  geometría para los sub-escenarios, fuera del plan baseline para no ser un cuello de botella de un
+  único server con todos los agentes).
+
+**Pendiente (paso 8.2):** sub-escenarios Evacuación (N agentes adentro → distribución de tiempos de
+evacuación) e Ingreso (caudal en 1/5/10 min → población vs tiempo antes de la escalera principal), con
+sus barridos y gráficos.
+

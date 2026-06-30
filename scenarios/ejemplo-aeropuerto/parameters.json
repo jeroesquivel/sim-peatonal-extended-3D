@@ -1,0 +1,134 @@
+{
+    "max_time": 1200,
+    "output_delta_time": 0.5,
+    "blueprint_name": "d-aeropuerto",
+    "agents_generators": [
+        {
+            "block_name": "INGRESO_AERO",
+            "plan": "VIAJE_AVION",
+            "agents": {
+                "min_radius_distribution": {
+                    "type": "UNIFORM",
+                    "min": 0.15,
+                    "max": 0.15
+                },
+                "max_radius_distribution": {
+                    "type": "UNIFORM",
+                    "min": 0.3,
+                    "max": 0.32
+                },
+                "max_velocity": 1.2
+            },
+            "active_time": 600.0,
+            "inactive_time": 0.0,
+            "generation": {
+                "period": 8.0,
+                "quantity_distribution": {
+                    "type": "UNIFORM",
+                    "min": 1.0,
+                    "max": 2.0
+                }
+            }
+        }
+    ],
+    "targets": [
+        {
+            "block_name": "SALA_EMBARQUE",
+            "attending_time_distribution": {
+                "type": "UNIFORM",
+                "min": 20.0,
+                "max": 50.0
+            }
+        }
+    ],
+    "servers": [
+        {
+            "block_name": "CHECKIN",
+            "attending_time_distribution": {
+                "type": "GAUSSIAN",
+                "mean": 12.0,
+                "std": 3.0
+            },
+            "max_capacity": 1
+        },
+        {
+            "block_name": "RX",
+            "attending_time_distribution": {
+                "type": "GAUSSIAN",
+                "mean": 8.0,
+                "std": 2.0
+            },
+            "max_capacity": 1
+        },
+        {
+            "block_name": "BOARDING",
+            "type": "SEMAPHORE",
+            "attending_time_distribution": {
+                "type": "UNIFORM",
+                "min": 90.0,
+                "max": 90.0
+            },
+            "max_capacity": 1,
+            "green_duration": 20.0,
+            "start_time": 20.0
+        }
+    ],
+    "plans": [
+        {
+            "name": "VIAJE_AVION",
+            "exit_selection": "RANDOM",
+            "objective_groups": [
+                {
+                    "block_name": "HALL_AERO",
+                    "layer": "TARGETS",
+                    "objective_selection": "CLOSEST",
+                    "quantity_distribution": {
+                        "type": "UNIFORM",
+                        "min": 1.0,
+                        "max": 1.0
+                    }
+                },
+                {
+                    "block_name": "CHECKIN",
+                    "layer": "SERVERS",
+                    "objective_selection": "CLOSEST",
+                    "quantity_distribution": {
+                        "type": "UNIFORM",
+                        "min": 1.0,
+                        "max": 1.0
+                    }
+                },
+                {
+                    "block_name": "RX",
+                    "layer": "SERVERS",
+                    "objective_selection": "CLOSEST",
+                    "quantity_distribution": {
+                        "type": "UNIFORM",
+                        "min": 1.0,
+                        "max": 1.0
+                    }
+                },
+                {
+                    "block_name": "SALA_EMBARQUE",
+                    "layer": "TARGETS",
+                    "objective_selection": "RANDOM",
+                    "quantity_distribution": {
+                        "type": "UNIFORM",
+                        "min": 1.0,
+                        "max": 1.0
+                    }
+                },
+                {
+                    "block_name": "BOARDING",
+                    "layer": "SERVERS",
+                    "objective_selection": "CLOSEST",
+                    "quantity_distribution": {
+                        "type": "UNIFORM",
+                        "min": 1.0,
+                        "max": 1.0
+                    }
+                }
+            ]
+        }
+    ]
+}

@@ -22,8 +22,32 @@ mvn test
 ### Empaquetar y correr
 ```
 mvn package
-java -jar target/simped-1.0.0-SNAPSHOT.jar
+java -jar target/simped-1.0.0-SNAPSHOT.jar scenarios/example out/output.csv cpm
 ```
+
+Los escenarios en **Formato B** (`parameters.json`, p. ej. el de la Escuela) necesitan Jackson en
+el classpath y se corren con `mvn exec` (el `-jar` no es fat-jar):
+```
+mvn exec:java -Dexec.mainClass=ar.edu.itba.simped.App -Dexec.args="scenarios/escuela out/escuela.csv cpm"
+```
+
+### Visualización
+
+Animación de `out/output.csv` sobre el escenario. Requiere `pip install matplotlib pillow`.
+
+```
+# Vista 3D a 45° con las plantas apiladas (paredes a su z, agentes en (x,y,z), escaleras inclinadas):
+python tools/visualize_simulation_3d.py --scenario scenarios/escuela --output out/escuela.csv \
+  --out out/escuela_3d.gif --stride 5
+
+# Vista 2D de una sola planta (paredes + agentes de esa z):
+python tools/visualize_simulation.py --scenario scenarios/escuela --output out/escuela.csv \
+  --floor 3 --out out/escuela_p1.gif
+```
+
+- `tools/visualize_simulation.py` — 2D, círculos coloreados por estado. `--floor <z>` filtra una planta.
+- `tools/visualize_simulation_3d.py` — vista 3D 45° apilando plantas. `--stride N` submuestrea frames.
+- El escenario **Escuela** (2 plantas) se genera con `python tools/scenarios-builders/build_escuela.py`.
 
 ---
 
@@ -52,7 +76,7 @@ java -jar target/simped-1.0.0-SNAPSHOT.jar
 
 Un escenario es un directorio con CSV. Hay un ejemplo completo en `scenarios/example/`.
 
-**Separador:** coma + espacio opcional (`, `). Primera línea = header. Coordenadas en metros. En el ejemplo z es siempre 0.0, pero la idea es extender el simulador para trabajar en 3D.
+**Separador:** coma + espacio opcional (`, `). Primera línea = header. Coordenadas en metros. La `z` es la **planta** de cada elemento (el ejemplo `scenarios/example/` es de una sola planta, `z=0`; el escenario `scenarios/escuela/` usa dos plantas, `z=0` y `z=3`, conectadas por escaleras).
 
 ### Archivos de geometría (definidos por la cátedra)
 
@@ -63,6 +87,7 @@ Un escenario es un directorio con CSV. Hay un ejemplo completo en `scenarios/exa
 | `GENERATORS.csv` | `block_name, x1, y1, z1, x2, y2, z2` |
 | `TARGETS.csv` | `block_name, figure_type, radius, x1, y1, z1, x2, y2, z2` |
 | `SERVERS.csv` | `block_name, x1, y1, z1, x2, y2, z2` — convención de naming: sufijos `_SERVER`, `_QUEUE000`, `_QUEUE001`, ... |
+| `STAIRS.csv` *(opcional, 3D)* | `block_name, x1, y1, z1, x2, y2, z2, width[, speed_factor]` — escalera: eje pie `(x1,y1,z1)` → tope `(x2,y2,z2)` con `z1≠z2` (ver D4). Sin este archivo el escenario es de una sola planta. |
 
 ### Archivos de parámetros 
 
@@ -109,14 +134,14 @@ Recomendación: crear `EXIT_PARAMS.csv` y `TARGET_PARAMS.csv` aparte, manteniend
 
 ## Formato de Output
 
-Archivo plano único `output.txt`. Una fila por agente por output step.
+Archivo plano único (CSV) `out/output.csv`. Una fila por agente por output step.
 
 ```
-tout; x; y; vx; vy; state
+tout; x; y; z; vx; vy; state; id
 ```
 
-- Separador: `;`.
-- `tout` con `%.4f`.
-- `state` = nombre del enum `BehaviorState`.
-- Sin header (a confirmar con el grupo).
+- Separador: `; `. Sin header. `Locale.US` (punto decimal).
+- `tout` con `%.4f`; coordenadas/velocidades con `%.6f`.
+- `z` = planta / altura en escalera (se agregó para 3D, ver D10 en `.claude/DECISIONES.md`).
+- `state` = nombre del enum `BehaviorState`. `id` = id del agente (último, para trazar trayectorias).
 

@@ -24,32 +24,53 @@ public final class LocationTargetSelector {
             long seed,
             Collection<Vec2> excluded
     ) {
+        int idx = chooseIndex(candidates, selection, from, seed, excluded);
+        return idx < 0 ? null : candidates.get(idx);
+    }
+
+    /**
+     * Igual que {@link #choose}, pero devuelve el <b>índice</b> del candidato
+     * elegido (o {@code -1} si no hay disponible). Es la primitiva correcta cuando
+     * los candidatos comparten {@code (x,y)} pero difieren en planta (aulas de PB
+     * y P1 una sobre otra): el índice identifica la planta sin ambigüedad, mientras
+     * que buscar por valor {@code Vec2} colapsaría los duplicados.
+     */
+    public static int chooseIndex(
+            List<Vec2> candidates,
+            ObjectiveSelection selection,
+            Vec2 from,
+            long seed,
+            Collection<Vec2> excluded
+    ) {
         if (candidates == null || candidates.isEmpty()) {
-            return null;
+            return -1;
         }
-        List<Vec2> available = candidates.stream()
-                .filter(candidate -> excluded == null || !excluded.contains(candidate))
-                .toList();
+        List<Integer> available = new java.util.ArrayList<>();
+        for (int i = 0; i < candidates.size(); i++) {
+            if (excluded == null || !excluded.contains(candidates.get(i))) {
+                available.add(i);
+            }
+        }
         if (available.isEmpty()) {
-            return null;
+            return -1;
         }
 
         ObjectiveSelection safeSelection = selection != null ? selection : ObjectiveSelection.CLOSEST;
         return switch (safeSelection) {
-            case RANDOM -> chooseRandom(available, seed);
-            case CLOSEST, ALL -> chooseClosest(available, from);
+            case RANDOM -> available.get(new SplittableRandom(seed).nextInt(available.size()));
+            case CLOSEST, ALL -> {
+                Vec2 anchor = from != null ? from : Vec2.ZERO;
+                int best = available.get(0);
+                double bestDist = anchor.distanceTo(candidates.get(best));
+                for (int i : available) {
+                    double d = anchor.distanceTo(candidates.get(i));
+                    if (d < bestDist) {
+                        bestDist = d;
+                        best = i;
+                    }
+                }
+                yield best;
+            }
         };
-    }
-
-    private static Vec2 chooseClosest(List<Vec2> candidates, Vec2 from) {
-        Vec2 anchor = from != null ? from : Vec2.ZERO;
-        return candidates.stream()
-                .min(Comparator.comparingDouble(anchor::distanceTo))
-                .orElse(candidates.get(0));
-    }
-
-    private static Vec2 chooseRandom(List<Vec2> candidates, long seed) {
-        SplittableRandom rng = new SplittableRandom(seed);
-        return candidates.get(rng.nextInt(candidates.size()));
     }
 }

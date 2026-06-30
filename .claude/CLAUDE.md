@@ -65,14 +65,30 @@ Para escenarios en **Formato B** (`parameters.json`) hace falta Jackson en el cl
 
 ### Visualización
 
+Requiere `pip install matplotlib pillow`. Los scripts leen el output con `z` (formato D10:
+`tout; x; y; z; vx; vy; state; id`).
+
 - `tools/visualize_simulation.py` — anima `out/output.csv` sobre el escenario (2D, círculos
-  coloreados por estado). Requiere `pip install matplotlib pillow`. Opción `--floor <z>` para
-  animar una sola planta (paredes + agentes de esa `z`).
-- `tools/visualize_simulation_3d.py` — vista 3D a 45° con las plantas apiladas (paredes a su `z`,
-  agentes como puntos en `(x,y,z)`, escaleras como segmento inclinado). Lee `STAIRS.csv` si existe.
+  coloreados por estado). Opción `--floor <z>` para animar **una sola planta** (paredes + agentes
+  de esa `z`).
+- `tools/visualize_simulation_3d.py` — **vista 3D a 45°** con las plantas apiladas (paredes a su
+  `z`, agentes como puntos en `(x,y,z)`, escaleras como segmento inclinado). Lee `STAIRS.csv` si
+  existe. Opción `--stride N` para submuestrear 1 de cada N frames (outputs largos).
 - `tools/animate_run.py` — animación alternativa.
 - Debug de ruteo: `-Dsimped.hopLog=out/hops.csv` registra cada `nextVisibleHop` para
   superponer los hops sobre el GIF.
+
+Flujo completo del escenario **Escuela** (2 plantas, Formato B → correr con `mvn exec`):
+
+```bash
+python tools/scenarios-builders/build_escuela.py                 # genera scenarios/escuela/
+mvn exec:java -Dexec.mainClass=ar.edu.itba.simped.App \
+  -Dexec.args="scenarios/escuela out/escuela.csv cpm"            # corre la simulación
+python tools/visualize_simulation_3d.py --scenario scenarios/escuela \
+  --output out/escuela.csv --out out/escuela_3d.gif --stride 5   # vista 3D apilada
+python tools/visualize_simulation.py --scenario scenarios/escuela \
+  --output out/escuela.csv --floor 3 --out out/escuela_p1.gif    # solo P1 (z=3) en 2D
+```
 
 ---
 
@@ -85,7 +101,9 @@ implementación. `App.java` cablea todo a mano (no hay framework de DI). El loop
 ### Estado del agente — `core/AgentState`
 Única fuente de verdad del estado kinemático y de comportamiento. **Mutable.** Lo escribe el
 generador al spawnear y el OperationalModel cada `dt`; lo leen Sensors y el índice de vecinos.
-Hoy guarda `x, y, vx, vy, radius, BehaviorState, AgentProfile`. **No tiene `z`.**
+Guarda `x, y, z, vx, vy, radius, BehaviorState, AgentProfile` (la `z` se agregó en el paso 1; sin
+`vz`, ver D2). `position()` devuelve `Vec3`; `setPosition(x,y)` conserva la `z` (la cambia solo el
+avance por escalera).
 
 ### Pipeline por agente (`AgentImpl.step(dt)`)
 1. **Sensors** (`agent/sensors/SensorsImpl`) — calcula distancia al foot-target, dispara
@@ -272,3 +290,49 @@ sirven de referencia de cómo se generan los CSV, pero **no forman parte de este
 > (`src/test/...`). Los tests de escenarios `A`–`I` (`ScenarioBPaseoComprasSmokeTest`, etc.) son
 > de los grupos anteriores y pueden eliminarse junto con sus builders (ver
 > `LIMPIEZA_RASTROS_GRUPOS.md`).
+
+---
+
+## Estado del trabajo y pendientes (retomar acá)
+
+**Última sesión: 2026-06-30.** El núcleo 3D está cerrado y validado end-to-end con un escenario
+real de 2 plantas. La fuente de verdad de las decisiones es [`DECISIONES.md`](./DECISIONES.md)
+(D1–D12).
+
+**Hecho (pasos 1–7 + 8.1):**
+- Pasos **1–7** completos: `Vec3` + `AgentState.z` (D1, D2), input propaga `z` + escaleras (D3, D4),
+  `Geometry` por planta (D5), grafo 3D por planta unido por escaleras (D6, D7), **CIM por planta** +
+  puente de escalera (D8), **CPM 3D** (z en escaleras + velocidad reducida + paredes de la planta
+  actual, D9), **output con `z`** (D10) + animación 2D-por-planta y **vista 3D** (`tools/`).
+- Paso **8.1** — escenario **Escuela** construido y andando (D12): `scenarios/escuela/` (Formato B)
+  generado por `tools/scenarios-builders/build_escuela.py`. Validado: ~100 agentes, ~60% sube a P1
+  por las escaleras, asiste clase y baja a una salida. Suite: **149 tests verde** (8 skipped viejos).
+- Durante 8.1 se arreglaron **4 bugs de integración multiplanta** que sólo se ven con 2 plantas
+  reales (ver **D11**): `Task` z por candidato, selección por índice (aulas PB/P1 comparten `(x,y)`),
+  grafo cruzando la arista de escalera, y `locateStair` del OM arrancando la interpolación en el pie.
+
+**Pendiente — confirmar con el usuario (decisiones de modelado de la Escuela):**
+1. **Aulas como `TARGET` con `attending_time`** (el agente llega y permanece la clase) vs. server
+   `classroom` con sesiones. Hoy: TARGET con dwell.
+2. **Kiosco fuera del plan baseline** (queda en la geometría del recreo, para usar en el sub-escenario
+   de Ingreso/recreo) vs. incluirlo en el plan. Hoy: fuera (un único server con todos los agentes
+   sería un cuello de botella).
+
+**Pendiente — paso 8.2 (próximo): sub-escenarios + barridos y gráficos.** Sobre la misma geometría
+de la Escuela, parametrizar el builder (`build_escuela.py`) para los dos casos del enunciado:
+- **Evacuación** — input: capacidad total `N` (agentes ya adentro, repartidos en aulas de **ambas
+  plantas**; usar generadores `instant_occupation` en las aulas o spawns por planta); observable:
+  **distribución de tiempos de evacuación**; escalar: tiempo promedio/máximo. Las dos salidas
+  (RECREO y EDIFICIO_PB) con `exit_selection` (los de P1 bajan por escalera).
+- **Ingreso** — input: caudal (los `Nmax` agentes distribuidos en **1 / 5 / 10 min**); observable:
+  **población vs. tiempo** en una zona (p. ej. antes de una escalera principal); escalar: ocupación
+  máxima/promedio. Acá el kiosco del recreo entra naturalmente en el plan.
+- Falta además: scripts de **barrido** (variar `N` / caudal, varias corridas) y de **gráficos** de los
+  observables/escalares. (No hay aún infra de barrido; crearla en `tools/`.)
+
+**Notas para retomar:**
+- Formato B (Escuela) **necesita Jackson** → correr con `mvn exec:java` (no el `-jar`, que no es
+  fat-jar). Ver comandos en la sección *Visualización*.
+- El build del grafo de la Escuela tarda ~1 min (grilla 0.20 m sobre 60×60 en 2 plantas); es normal.
+- `git status` al cierre: working tree con los cambios de la sesión **sin commitear** (regla 1: el
+  usuario commitea).

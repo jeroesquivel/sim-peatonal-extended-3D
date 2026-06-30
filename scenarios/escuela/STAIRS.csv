@@ -1,0 +1,3 @@
+block_name, x1, y1, z1, x2, y2, z2, width
+ESC_SUR, 45, 7, 0, 45, 2, 3, 4
+ESC_NORTE, 45, 53, 0, 45, 58, 3, 4

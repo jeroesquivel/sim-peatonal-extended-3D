@@ -395,17 +395,19 @@ public final class StateMachineImpl implements StateMachine {
     }
 
     private boolean resolveGroupedLocationTarget(Task task, Set<Vec2> excluded) {
-        Vec2 selected = LocationTargetSelector.choose(
+        // Selección por índice: las aulas de PB y P1 comparten (x,y), así que
+        // resolver por valor Vec2 colapsaría la planta. El índice la identifica.
+        int idx = LocationTargetSelector.chooseIndex(
                 task.locationCandidates(),
                 task.locationSelection(),
                 new Vec2(agentState.x(), agentState.y()),
                 task.locationSelectionSeed(),
                 excluded);
-        if (selected == null) {
+        if (idx < 0) {
             return false;
         }
-        task.resolveLocationTarget(selected);
-        footTarget = selected;
+        task.resolveLocationTarget(idx);
+        footTarget = task.locationCandidates().get(idx);
         return true;
     }
 

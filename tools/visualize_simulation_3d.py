@@ -89,10 +89,13 @@ def parse_sim_output_3d(path: str) -> list[tuple[float, list[dict]]]:
     return sorted(frames.items())
 
 
-def render(scenario: str, output: str, out: str, fps: int, dpi: int, elev: float, azim: float):
+def render(scenario: str, output: str, out: str, fps: int, dpi: int, elev: float, azim: float,
+           stride: int = 1):
     walls = parse_walls_3d(os.path.join(scenario, "WALLS.csv"))
     stairs = parse_stairs(os.path.join(scenario, "STAIRS.csv"))
     frames = parse_sim_output_3d(output)
+    if stride > 1:
+        frames = frames[::stride]  # submuestreo para outputs largos
     if not frames:
         raise SystemExit(f"Sin datos en {output}")
 
@@ -156,8 +159,9 @@ def main():
     p.add_argument("--dpi", type=int, default=120)
     p.add_argument("--elev", type=float, default=25.0, help="Elevación de cámara (grados)")
     p.add_argument("--azim", type=float, default=-60.0, help="Azimut de cámara (grados, ~45°)")
+    p.add_argument("--stride", type=int, default=1, help="Submuestrear 1 de cada N frames (outputs largos)")
     args = p.parse_args()
-    render(args.scenario, args.output, args.out, args.fps, args.dpi, args.elev, args.azim)
+    render(args.scenario, args.output, args.out, args.fps, args.dpi, args.elev, args.azim, args.stride)
 
 
 if __name__ == "__main__":

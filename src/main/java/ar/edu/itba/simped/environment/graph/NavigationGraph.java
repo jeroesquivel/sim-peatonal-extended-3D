@@ -38,6 +38,16 @@ final class NavigationGraph {
     /** Tipo por nodo (0=área, 1=conector, 2=servidor, 3=escalera); puede ser null. */
     private final List<Integer> nodeTypes;
 
+    /** Aristas de escalera: pares de nodos en plantas distintas (pie↔tope). */
+    private final List<int[]> stairEdges;
+    /** Niveles de planta distintos presentes en los nodos (claves redondeadas). */
+    private final java.util.Set<Long> floorKeys;
+
+    /** Cuán cerca (planar) del pie de la escalera el agente empieza a subir hacia el tope. */
+    private static final double STAIR_FOOT_REACH = 1.5;
+    /** Tolerancia planar para considerar que el agente está sobre el eje de una escalera. */
+    private static final double STAIR_AXIS_TOL = 3.0;
+
     NavigationGraph(List<Vec3> nodes,
                     List<Map<Integer, Double>> adjacency,
                     List<Wall> walls) {
@@ -55,6 +65,18 @@ final class NavigationGraph {
         this.wallsByFloor = new HashMap<>();
         for (Wall w : this.walls) {
             wallsByFloor.computeIfAbsent(floorKey(w.z()), k -> new ArrayList<>()).add(w);
+        }
+        this.floorKeys = new java.util.HashSet<>();
+        for (Vec3 n : this.nodes) {
+            floorKeys.add(floorKey(n.z()));
+        }
+        this.stairEdges = new ArrayList<>();
+        for (int a = 0; a < this.nodes.size(); a++) {
+            for (int b : adjacency.get(a).keySet()) {
+                if (a < b && !sameFloor(this.nodes.get(a).z(), this.nodes.get(b).z())) {
+                    stairEdges.add(new int[]{a, b});
+                }
+            }
         }
     }
 
@@ -91,6 +113,16 @@ final class NavigationGraph {
     private Query computeQuery(Vec3 agentPosition, Vec3 target) {
         if (isVisible(agentPosition, target)) {
             return new Query(target, true, -1, -1, List.of(), -1, -1);
+        }
+
+        // Multiplanta: si el agente ya está SOBRE una escalera (z entre plantas),
+        // su hop es el extremo de la escalera hacia la planta del target. Así sigue
+        // subiendo/bajando el tramo en vez de quedar sin nodo visible.
+        if (!isOnFloor(agentPosition.z())) {
+            Vec3 onStair = stairTraversalHop(agentPosition, target);
+            if (onStair != null) {
+                return new Query(onStair, false, -1, -1, List.of(), -1, -1);
+            }
         }
 
         int startNode = closestVisibleNode(agentPosition);
@@ -194,14 +226,60 @@ final class NavigationGraph {
             if (i == path.size() - 1) {
                 return new FvpOnPath(path.get(i), -1, -1);
             }
+            Vec3 cur = path.get(i);
+            Vec3 nxt = path.get(i + 1);
+            // Arista de escalera en el camino (cur=pie, nxt=tope en otra planta):
+            // mientras el agente no llegó al pie, el hop es el pie; una vez cerca,
+            // el hop pasa al tope para que el agente suba el tramo (la z la interpola
+            // el OM al estar sobre la escalera, paso 6).
+            if (!sameFloor(cur.z(), nxt.z())) {
+                if (agent.xy().distanceTo(cur.xy()) <= STAIR_FOOT_REACH) {
+                    return new FvpOnPath(nxt, i + 1, i + 1);
+                }
+                return new FvpOnPath(cur, i, i);
+            }
             if (i + 1 < graphNodeCount) {
-                Vec3 hop = binarySearchFVP(agent, path.get(i), path.get(i + 1));
+                Vec3 hop = binarySearchFVP(agent, cur, nxt);
                 return new FvpOnPath(hop, i, i + 1);
             }
-            Vec3 hop = binarySearchFVP(agent, path.get(i), path.get(i + 1));
+            Vec3 hop = binarySearchFVP(agent, cur, nxt);
             return new FvpOnPath(hop, i, i);
         }
         return new FvpOnPath(safeFallbackHop(agent, -1), -1, -1);
+    }
+
+    /** ¿{@code z} coincide con alguna planta del grafo (no está sobre una escalera)? */
+    private boolean isOnFloor(double z) {
+        return floorKeys.contains(floorKey(z));
+    }
+
+    /**
+     * Hop para un agente que está sobre una escalera (z entre plantas): el extremo
+     * del tramo hacia la planta del {@code target}. Busca la arista de escalera cuyo
+     * eje planar contiene al agente; null si no está sobre ninguna.
+     */
+    private Vec3 stairTraversalHop(Vec3 agent, Vec3 target) {
+        for (int[] e : stairEdges) {
+            Vec3 a = nodes.get(e[0]);
+            Vec3 b = nodes.get(e[1]);
+            if (distanceToSegmentXy(agent.xy(), a.xy(), b.xy()) > STAIR_AXIS_TOL) {
+                continue;
+            }
+            Vec3 lower = a.z() <= b.z() ? a : b;
+            Vec3 upper = a.z() <= b.z() ? b : a;
+            // Subir si el target está por encima del agente; bajar si está por debajo.
+            return target.z() >= agent.z() ? upper : lower;
+        }
+        return null;
+    }
+
+    private static double distanceToSegmentXy(Vec2 p, Vec2 a, Vec2 b) {
+        double dx = b.x() - a.x(), dy = b.y() - a.y();
+        double len2 = dx * dx + dy * dy;
+        if (len2 < 1e-12) return p.distanceTo(a);
+        double t = ((p.x() - a.x()) * dx + (p.y() - a.y()) * dy) / len2;
+        t = Math.max(0.0, Math.min(1.0, t));
+        return p.distanceTo(new Vec2(a.x() + t * dx, a.y() + t * dy));
     }
 
     private Vec3 safeFallbackHop(Vec3 agentPosition, int knownVisibleNode) {

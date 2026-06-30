@@ -186,15 +186,16 @@ public final class AgentAssembler {
     }
 
     private Task toGroupedLocationTask(AgentState state, PlanTemplate template, PlanStep step, int stepIndex) {
-        // Los candidatos de un grupo comparten planta: tomamos la z del primero.
-        double z = step.candidates().get(0).z();
+        // Un grupo puede abarcar varias plantas (p. ej. aulas en PB y P1): pasamos
+        // la planta de cada candidato para que la z efectiva del Task siga al
+        // candidato que se resuelva (CLOSEST/RANDOM), no a la del primero.
         return Task.locationGroup(
                 step.blockName(),
                 step.candidates().stream().map(TaskStep::target).toList(),
+                step.candidates().stream().map(TaskStep::z).toList(),
                 step.selection(),
                 sampleGroupedDwellSeconds(state, template, step, stepIndex),
-                groupedLocationSeed(state, template, step, stepIndex),
-                z
+                groupedLocationSeed(state, template, step, stepIndex)
         );
     }
 
