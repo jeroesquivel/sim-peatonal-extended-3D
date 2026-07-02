@@ -84,7 +84,7 @@ public final class GeometryAssembler {
                 continue;
             }
             try {
-                out.add(new GeneratorZone(row.blockName(), row.area(), gParams));
+                out.add(new GeneratorZone(row.blockName(), row.area(), row.z(), gParams));
             } catch (IllegalArgumentException e) {
                 acc.add(ValidationCode.V11,
                         "GeneratorZone[" + row.blockName() + "]",

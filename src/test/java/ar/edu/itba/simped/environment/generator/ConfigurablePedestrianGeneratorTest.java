@@ -29,7 +29,7 @@ class ConfigurablePedestrianGeneratorTest {
     private static ConfigurablePedestrianGenerator gen(
             double activeTime, double rateOrCount, GenerationMode mode) {
         return new ConfigurablePedestrianGenerator(
-                "test", activeTime, 0.0, BIG_ZONE, rateOrCount, mode, PLANS, List::of);
+                "test", activeTime, 0.0, BIG_ZONE, rateOrCount, mode, PLANS, List::of, 0.0);
     }
 
     @Test

@@ -653,3 +653,41 @@ del `CpmOperationalModelStairTest`).
   (la velocidad deseada ya venía perpendicular por el escape) — se había probado y revertido (D14).
 - *Bajar `ve` global o el rango del avoidance de pared (`Aw`,`Bw`)*: descalibra el A-CPM en todos lados;
   el cambio de umbral de contacto es local y respeta la calibración publicada de la repulsión suave.
+
+---
+
+## D18 — Migración 3D del spawn de generadores: propagar la planta (z) al agente creado
+
+- **Fecha:** 2026-07-02
+- **Estado:** vigente
+- **Paso del plan:** 8.2 / Task 2 (Evacuación con alumnos ya adentro de aulas de ambas plantas)
+
+**Contexto.** Al armar el sub-escenario Evacuación (alumnos que arrancan DENTRO de las aulas de PB y
+P1, vía `instant_occupation`), **ningún** agente nacía en P1: los 16 que debían spawnear en aulas de
+z=3 aparecían en z=0. El **path de generación de agentes nunca se migró a 3D** (mismo tipo de gap que
+D16 en servers): la `z` de la zona de `GENERATORS.csv` se perdía en tres lugares encadenados —
+(1) `GeometryAssembler.buildGenerators` construía el `GeneratorZone` con el ctor de conveniencia que
+fija `z=0`, ignorando `row.z()`; (2) `ConfigurablePedestrianGenerator.buildAgent` hacía
+`setPosition(x,y)` (2 args, z queda en el default 0); (3) `WiredPedestrianGenerator.remapId` reconstruía
+el `AgentState` al remapear el id y **también** tiraba la z (`setPosition(x,y)`). Como PB y P1 comparten
+layout `(x,y)`, los agentes "de P1" quedaban indistinguibles de los de PB y salían sin usar la escalera.
+
+**Decisión (fixes).** Propagar la planta de punta a punta `row.z()` → `GeneratorZone.z()` → generador →
+`AgentState`:
+1. `GeometryAssembler.buildGenerators`: `new GeneratorZone(base, area, row.z(), gParams)` (ctor con z).
+2. `ConfigurablePedestrianGenerator`: nuevo campo/param `double spawnZ` (App le pasa `zone.z()`);
+   `buildAgent` hace `st.setZ(spawnZ)` tras `setPosition(x,y)`.
+3. `WiredPedestrianGenerator.remapId`: `setPosition(x, y, src.z())` (preserva la z al remapear).
+El módulo del generador sigue operando en `xy` (las `spawnZones` son `Rectangle` 2D); sólo se agrega la
+planta al crear/copiar el `AgentState`. Ripple mínimo (App + 1 test que pasa `spawnZ=0.0`).
+
+**Resultado.** Evacuación N=40: t=0 con 16 agentes en z=3 (antes 0), los 16 bajan por escalera a una
+salida de PB, evacuación completa. **149 tests verdes.**
+
+**Alternativa descartada.** Hacer las `spawnZones` 3D (lista de rect+z) o migrar todo el generador a
+`Vec3`: innecesario — la planta de spawn es una sola por generador (App cablea una zona por generador),
+así que un `double spawnZ` alcanza.
+
+**Relación.** Es el gemelo de D16 (servers): ambos son el mismo patrón de gap (ctor de conveniencia que
+defaultea z=0 + wiring 2D) que la migración 3D original no cubrió porque no había servers/generadores en
+plantas altas hasta el escenario Escuela multiplanta.

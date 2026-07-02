@@ -1,5 +1,6 @@
 package ar.edu.itba.simped.environment.graph;
 
+import ar.edu.itba.simped.core.Seeds;
 import ar.edu.itba.simped.core.Vec2;
 import ar.edu.itba.simped.core.Vec3;
 import java.io.BufferedWriter;
@@ -28,7 +29,7 @@ final class NavigationGraph {
     /** Tolerancia para agrupar paredes/nodos por planta. */
     private static final double FLOOR_EPS = 1e-6;
 
-    private final Random hopRng = new Random();
+    private final Random hopRng = Seeds.rng("navgraph");
 
     private final List<Vec3> nodes;
     private final List<Map<Integer, Double>> adjacency;

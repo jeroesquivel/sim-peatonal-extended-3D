@@ -19,6 +19,12 @@ Genera (Formato B): WALLS/EXITS/GENERATORS/TARGETS/SERVERS/STAIRS .csv + paramet
 Uso:
     python tools/scenarios-builders/build_escuela.py            # -> scenarios/escuela
     python tools/scenarios-builders/build_escuela.py --out scenarios/escuela
+
+CLI de barrido (para tools/sweep_run.py; --mode baseline es idéntico al uso
+de siempre, --value se ignora en baseline):
+    python tools/scenarios-builders/build_escuela.py --mode baseline --out DIR
+    python tools/scenarios-builders/build_escuela.py --mode evacuacion --value 100 --out DIR  # N agentes ya adentro (Task 2)
+    python tools/scenarios-builders/build_escuela.py --mode ingreso --value 5 --out DIR        # NotImplementedError (Task 4, pendiente)
 """
 
 from __future__ import annotations
@@ -200,11 +206,35 @@ def build_exits() -> list[tuple]:
     ]
 
 
-def build_generators() -> list[tuple]:
-    return [
-        ("INGRESO_RECREO", 2.0, 27.0, 0.0, 5.0, 33.0, 0.0),
-        ("INGRESO_EDIFICIO", 55.0, 2.0, 0.0, 58.0, 6.0, 0.0),
-    ]
+EVAC_ZONE_MARGIN = 0.3       # inset extra de la zona EVAC_i respecto del recinto
+                              # del aula (que ya trae AULA_MARGIN de las paredes)
+
+
+def build_generators(mode: str = "baseline", value: float | None = None) -> list[tuple]:
+    """Zonas de spawn (GENERATORS.csv), mode-aware.
+
+    - ``baseline`` (default): las 2 entradas de siempre (recreo + edificio
+      PB). ``value`` se ignora.
+    - ``evacuacion``: 16 zonas ``EVAC_1``..``EVAC_16``, una por aula (interior
+      del recinto de ``build_aula_rooms``, con un inset extra
+      ``EVAC_ZONE_MARGIN``), en la planta de esa aula (z=0 las 8 de PB, z=3
+      las 8 de P1). ``value`` no afecta la geometría de las zonas — sólo
+      cuántos agentes se reparten en cada una (ver ``_evac_room_counts`` en
+      ``build_parameters``); se acepta el parámetro por uniformidad de firma
+      con el resto de los builders mode-aware.
+    """
+    if mode == "baseline":
+        return [
+            ("INGRESO_RECREO", 2.0, 27.0, 0.0, 5.0, 33.0, 0.0),
+            ("INGRESO_EDIFICIO", 55.0, 2.0, 0.0, 58.0, 6.0, 0.0),
+        ]
+    if mode == "evacuacion":
+        m = EVAC_ZONE_MARGIN
+        return [
+            (f"EVAC_{i}", x0 + m, y0 + m, z, x1 - m, y1 - m, z)
+            for i, (base, n, x0, y0, x1, y1, z) in enumerate(build_aula_rooms(), start=1)
+        ]
+    raise ValueError(f"mode desconocido para build_generators: {mode!r}")
 
 
 # ── Escritura de CSV ─────────────────────────────────────────────────────────
@@ -259,7 +289,120 @@ def _classroom(block_name: str) -> dict:
     }
 
 
-def build_parameters() -> dict:
+def build_parameters(mode: str = "baseline", value: float | None = None) -> dict:
+    """Despacha la construcción de ``parameters.json`` según el sub-escenario.
+
+    - ``baseline`` (default): día escolar completo (ingreso → clase → timbre →
+      evacuación). ``value`` se IGNORA. Comportamiento IDÉNTICO al builder
+      original (sin barrido).
+    - ``evacuacion`` (Task 2 del plan de entrega): ``value`` es la capacidad
+      total N de agentes ya adentro (repartidos en las 16 aulas de ambas
+      plantas, ver ``_evac_room_counts``); parten ya sentados y evacúan
+      directo a una salida (plan ``EVACUAR``, sin aula/clase intermedia).
+    - ``ingreso`` (Task 4 del plan de entrega, pendiente): ``value`` sería el
+      caudal de ingreso (Nmax agentes distribuidos en la ventana de llegada).
+
+    ``baseline`` y ``evacuacion`` están implementados; ``ingreso`` queda como
+    punto de extensión explícito para el próximo subagente.
+    """
+    if mode == "baseline":
+        return _build_parameters_baseline()
+    if mode == "evacuacion":
+        if value is None:
+            raise ValueError(
+                "build_parameters(mode='evacuacion') requiere --value N "
+                "(capacidad total de agentes ya adentro)"
+            )
+        n_agents = int(round(value))
+        if n_agents < 0:
+            raise ValueError(f"value (N) debe ser >= 0, recibido {value!r}")
+        return _build_parameters_evacuacion(n_agents)
+    if mode == "ingreso":
+        raise NotImplementedError(
+            "build_parameters(mode='ingreso'): todavía no implementado "
+            "(Task 4 del plan de entrega). Hoy sólo existe 'baseline'."
+        )
+    raise ValueError(f"mode desconocido: {mode!r} (esperado: baseline, evacuacion, ingreso)")
+
+
+def _evac_room_counts(n_rooms: int, total: int) -> list[int]:
+    """Reparte ``total`` agentes entre ``n_rooms`` lo más parejo posible.
+
+    Los primeros ``total % n_rooms`` reciben ``ceil(total/n_rooms)``, el
+    resto ``floor(total/n_rooms)``. La suma da EXACTO ``total``."""
+    base, extra = divmod(total, n_rooms)
+    return [base + 1] * extra + [base] * (n_rooms - extra)
+
+
+EVAC_MAX_TIME = 400.0        # s totales: amplio para que alcancen a evacuar del todo
+EVAC_GEN_ACTIVE_TIME = 1.0   # activeTime del generador BATCH (irrelevante para
+                              # instant_occupation, que coloca todo en t=0 vía
+                              # spawnInitial; sólo debe ser > 0 por validación)
+
+
+def _build_parameters_evacuacion(n_agents: int) -> dict:
+    """Sub-escenario Evacuación: ``n_agents`` alumnos ya sentados en las 16
+    aulas (repartidos ~parejo entre PB y P1) que evacúan directo a una salida
+    al iniciar la simulación (t=0), sin pasar por clase.
+
+    Cada aula es una zona ``EVAC_i`` con generador ``instant_occupation``
+    (coloca su lote completo en t=0, ver ``ConfigurablePedestrianGenerator
+    .spawnInitial``) y ``quantity_distribution`` UNIFORM con min=max=c_i (el
+    JSON de Formato B no soporta el tipo ``DETERMINISTIC`` — sólo
+    ``UNIFORM``/``GAUSSIAN``, ver ``DistributionResolver``; UNIFORM con
+    min==max siempre samplea ese valor exacto, mismo truco que ``_classroom``
+    usa para ``attending_time_distribution``). El plan ``EVACUAR`` no tiene
+    aula/clase (ya están adentro): sólo ``exit_selection`` sin
+    ``objective_groups`` (una salida al azar, ver ``FormatBLoader
+    .buildPlanTemplates`` — el paso EXIT final se agrega siempre, aún con
+    ``objective_groups: []``)."""
+    zones = build_generators("evacuacion")   # 16 (block_name, x0,y0,z, x1,y1,z)
+    counts = _evac_room_counts(len(zones), n_agents)
+
+    gen_agents = {
+        "min_radius_distribution": {"type": "UNIFORM", "min": 0.15, "max": 0.15},
+        "max_radius_distribution": {"type": "UNIFORM", "min": 0.30, "max": 0.32},
+        "max_velocity": 1.4,
+    }
+
+    generators = []
+    for (block_name, _x0, _y0, _z0, _x1, _y1, _z1), c in zip(zones, counts):
+        generators.append({
+            "block_name": block_name,
+            "plan": "EVACUAR",
+            "mode": "instant_occupation",
+            "agents": gen_agents,
+            "active_time": EVAC_GEN_ACTIVE_TIME,
+            "inactive_time": NEVER_REACTIVATE,
+            "generation": {
+                "period": 60.0,
+                "quantity_distribution": {"type": "UNIFORM", "min": float(c), "max": float(c)},
+            },
+        })
+
+    return {
+        "max_time": EVAC_MAX_TIME,
+        "output_delta_time": 0.2,
+        "blueprint_name": "escuela_evacuacion",
+        "agents_generators": generators,
+        "targets": [],
+        # Los servers de aula/kiosco quedan declarados (geometría/servers.csv
+        # comparte block_names con el baseline) pero ningún plan los
+        # referencia: inocuo, no rompen nada.
+        "servers": [
+            _classroom("AULA_PB"),
+            _classroom("AULA_P1"),
+            {"block_name": "KIOSCO",
+             "attending_time_distribution": {"type": "GAUSSIAN", "mean": 8.0, "std": 2.0},
+             "max_capacity": 1},
+        ],
+        "plans": [
+            {"name": "EVACUAR", "exit_selection": "RANDOM", "objective_groups": []},
+        ],
+    }
+
+
+def _build_parameters_baseline() -> dict:
     # Baseline (día escolar, 1 período): los alumnos entran por ambas entradas
     # durante la ventana de llegada. Según el plan que les toca (CLASE_PB o
     # CLASE_P1, ~50/50), van a un aula de PB o de P1 (estas últimas subiendo por
@@ -317,14 +460,27 @@ def main():
     repo = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
     p = argparse.ArgumentParser(description="Genera el escenario ESCUELA (3D, Formato B)")
     p.add_argument("--out", default=os.path.join(repo, "scenarios", "escuela"))
+    p.add_argument("--mode", choices=["baseline", "evacuacion", "ingreso"], default="baseline",
+                   help="sub-escenario a generar. 'evacuacion' (Task 2) implementado; "
+                        "'ingreso' (Task 4) es punto de extensión, no implementado aún.")
+    p.add_argument("--value", type=float, default=None,
+                   help="input numérico del barrido (capacidad N para 'evacuacion', "
+                        "caudal para 'ingreso'). Ignorado en 'baseline'.")
     args = p.parse_args()
     out = args.out
+
+    # Se calcula ANTES de escribir ningún CSV: si el mode todavía no está
+    # implementado, falla rápido (NotImplementedError) sin dejar un directorio
+    # de escenario a medio escribir.
+    parameters = build_parameters(args.mode, args.value)
+
     os.makedirs(out, exist_ok=True)
 
     write_csv(os.path.join(out, "WALLS.csv"), "x1, y1, z1, x2, y2, z2",
               [(x1, y1, z, x2, y2, z) for (x1, y1, x2, y2, z) in build_walls()])
     write_csv(os.path.join(out, "EXITS.csv"), "block_name, x1, y1, z1, x2, y2, z2", build_exits())
-    write_csv(os.path.join(out, "GENERATORS.csv"), "block_name, x1, y1, z1, x2, y2, z2", build_generators())
+    write_csv(os.path.join(out, "GENERATORS.csv"), "block_name, x1, y1, z1, x2, y2, z2",
+              build_generators(args.mode, args.value))
     write_csv(os.path.join(out, "TARGETS.csv"),
               "block_name, figure_type, radius, x1, y1, z1, x2, y2, z2",
               [(b, "CIRCLE", r, x, y, z, x, y, z) for (b, r, x, y, z) in build_targets()])
@@ -332,7 +488,7 @@ def main():
     write_csv(os.path.join(out, "STAIRS.csv"),
               "block_name, x1, y1, z1, x2, y2, z2, width", build_stairs())
     with open(os.path.join(out, "parameters.json"), "w", encoding="utf-8") as f:
-        json.dump(build_parameters(), f, indent=4, ensure_ascii=False)
+        json.dump(parameters, f, indent=4, ensure_ascii=False)
 
     nwalls = len(build_walls())
     print(f"Escenario ESCUELA generado en {out}")

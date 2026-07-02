@@ -4,6 +4,7 @@ import ar.edu.itba.simped.core.AgentState;
 import ar.edu.itba.simped.core.BehaviorState;
 import ar.edu.itba.simped.core.PlanTemplate;
 import ar.edu.itba.simped.core.Rectangle;
+import ar.edu.itba.simped.core.Seeds;
 import ar.edu.itba.simped.core.Vec2;
 import ar.edu.itba.simped.core.ports.Agent;
 
@@ -81,6 +82,8 @@ public final class ConfigurablePedestrianGenerator implements PlanAwarePedestria
     private final GenerationMode mode;
     private final List<PlanTemplate> planTemplates;
     private final Supplier<List<AgentState>> existingAgentsSupplier;
+    /** Planta (z) en la que nacen los agentes de este generador. */
+    private final double spawnZ;
 
     /** Caudal efectivo por puerta (personas/min), tras posible recorte. */
     private final double[] effectiveFlowRatePerDoor;
@@ -122,7 +125,7 @@ public final class ConfigurablePedestrianGenerator implements PlanAwarePedestria
     /** Mapa agentId → planTemplate asignado, para uso del wiring externo (G9 → assembler). */
     private final Map<Integer, PlanTemplate> agentPlanMap = new HashMap<>();
 
-    private final Random rng = new Random();
+    private final Random rng;
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
@@ -135,6 +138,7 @@ public final class ConfigurablePedestrianGenerator implements PlanAwarePedestria
      * @param mode                    Modo de llegada: CALM o BATCH.
      * @param planTemplates           Plantillas de plan de G2, asignadas en round-robin.
      * @param existingAgentsSupplier  Proveedor de posiciones de agentes existentes (G7).
+     * @param spawnZ                  Planta (z) en la que nacen los agentes de este generador.
      */
     public ConfigurablePedestrianGenerator(
             String generatorId,
@@ -144,7 +148,8 @@ public final class ConfigurablePedestrianGenerator implements PlanAwarePedestria
             double flowRatePerMinPerDoor,
             GenerationMode mode,
             List<PlanTemplate> planTemplates,
-            Supplier<List<AgentState>> existingAgentsSupplier
+            Supplier<List<AgentState>> existingAgentsSupplier,
+            double spawnZ
     ) {
         if (spawnZones == null || spawnZones.isEmpty())
             throw new IllegalArgumentException("spawnZones must be non-empty");
@@ -162,12 +167,14 @@ public final class ConfigurablePedestrianGenerator implements PlanAwarePedestria
             throw new IllegalArgumentException("mode required");
 
         this.generatorId            = (generatorId != null && !generatorId.isBlank()) ? generatorId : "gen";
+        this.rng                    = Seeds.rng(this.generatorId);
         this.activeTime             = activeTime;
         this.inactiveTime           = inactiveTime;
         this.spawnZones             = List.copyOf(spawnZones);
         this.mode                   = mode;
         this.planTemplates          = List.copyOf(planTemplates);
         this.existingAgentsSupplier = existingAgentsSupplier;
+        this.spawnZ                 = spawnZ;
 
         int n = this.spawnZones.size();
         this.effectiveFlowRatePerDoor    = new double[n];
@@ -456,6 +463,7 @@ public final class ConfigurablePedestrianGenerator implements PlanAwarePedestria
         int id        = agentIdCounter++;
         AgentState st = new AgentState(id, planTemplate.name());
         st.setPosition(pos.x(), pos.y());
+        st.setZ(spawnZ);
         st.setRadius(AGENT_RADIUS);
         st.setState(BehaviorState.IDLE);
         agentPlanMap.put(id, planTemplate);

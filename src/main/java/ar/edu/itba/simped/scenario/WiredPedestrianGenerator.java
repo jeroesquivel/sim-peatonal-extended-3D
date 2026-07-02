@@ -77,7 +77,7 @@ public final class WiredPedestrianGenerator implements PedestrianGenerator {
      *  los campos cinemáticos. */
     private static AgentState remapId(AgentState src, int newId) {
         AgentState s = new AgentState(newId, src.agentType());
-        s.setPosition(src.x(), src.y());
+        s.setPosition(src.x(), src.y(), src.z());
         s.setVelocity(src.vx(), src.vy());
         s.setRadius(src.radius());
         s.setState(src.state());

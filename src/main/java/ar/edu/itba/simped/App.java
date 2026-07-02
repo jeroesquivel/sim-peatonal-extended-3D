@@ -204,7 +204,7 @@ public final class App {
 
             PedestrianGenerator base = new ConfigurablePedestrianGenerator(
                     zone.blockName(), activeTime, inactiveTime, List.of(zone.spawnArea()),
-                    flowRate, mode, zonePlans, existingAgentsSupplier);
+                    flowRate, mode, zonePlans, existingAgentsSupplier, zone.z());
             zoneGenerators.add(
                     new WiredPedestrianGenerator(base, assembler, agentRegistry, idSource));
         }
