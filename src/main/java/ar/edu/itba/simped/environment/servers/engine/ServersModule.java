@@ -433,6 +433,17 @@ public final class ServersModule {
         return agents.containsKey(agentId);
     }
 
+    /**
+     * Id del server (miembro concreto) al que está delegado {@code agentId}, o
+     * {@code -1} si no está delegado. Lo usa el wiring (I13b) para ubicar el
+     * target fino del server en la PLANTA de ese server (el módulo es planar en
+     * {@code xy}; la {@code z} la agrega el wiring según el server delegado).
+     */
+    public int delegatedServerId(int agentId) {
+        DelegatedAgent da = agents.get(agentId);
+        return da == null ? -1 : da.serverId;
+    }
+
     public int countDelegated() {
         return agents.size();
     }

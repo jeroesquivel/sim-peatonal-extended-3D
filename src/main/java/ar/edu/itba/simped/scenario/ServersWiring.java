@@ -23,6 +23,7 @@ import ar.edu.itba.simped.environment.servers.queue.QueueLine;
 import ar.edu.itba.simped.environment.servers.service.ServiceTimeSampler;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -63,18 +64,34 @@ public final class ServersWiring {
         ServersParameters params = ServersParameters.defaults();
 
         List<Server> servers = new ArrayList<>(zones.size());
+        // Planta (z) de cada server por su id: el módulo de Servers es planar
+        // (opera en xy), así que la z del target fino la restauramos acá según
+        // el server al que el agente fue delegado (soporta aulas en P1, z=3).
+        Map<Integer, Double> serverZById = new HashMap<>(zones.size());
         int id = 0;
         for (ServerZone zone : zones) {
+            serverZById.put(id, zone.z());
             servers.add(toServer(id++, zone, params.slotSpacing()));
         }
 
+        // El módulo se crea más abajo; el targetSink (definido antes) lo referencia
+        // por holder para consultar a qué server está delegado cada agente.
+        final ServersModule[] moduleHolder = new ServersModule[1];
         TargetSink targetSink = (agentId, target) -> {
             Agent a = registry.get(agentId);
             if (a instanceof AgentImpl impl) {
                 // I13b: el agente sigue el target del Server. El target del módulo
-                // es planar (xy); lo ubicamos en la planta actual del agente
-                // (Fase A: una sola planta → z del agente).
-                impl.setServerTarget(target.withZ(impl.state().z()));
+                // es planar (xy); lo ubicamos en la PLANTA del server delegado
+                // (no en la del agente, que podría estar aún en otra planta yendo
+                // hacia una escalera). Fallback: z actual del agente.
+                double z = impl.state().z();
+                if (moduleHolder[0] != null) {
+                    int sid = moduleHolder[0].delegatedServerId(agentId);
+                    if (sid >= 0) {
+                        z = serverZById.getOrDefault(sid, z);
+                    }
+                }
+                impl.setServerTarget(target.withZ(z));
             }
         };
         EventSink eventSink = new EventSink() {
@@ -102,8 +119,10 @@ public final class ServersWiring {
             }
         };
 
-        return new ServersModule(servers, targetSink, eventSink,
+        ServersModule module = new ServersModule(servers, targetSink, eventSink,
                 new ServiceTimeSampler(new Random(SEED)), params);
+        moduleHolder[0] = module;
+        return module;
     }
 
     private static Server toServer(int id, ServerZone zone, double slotSpacing) {

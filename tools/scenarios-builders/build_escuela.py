@@ -43,7 +43,8 @@ BAND_Y = (8.0, 52.0)                # franja de aulas en y (entre las dos puntas
 END_BOTTOM = (0.0, 8.0)            # punta sur (escalera)
 END_TOP = (52.0, 60.0)             # punta norte (escalera)
 N_ROOMS = 4                         # aulas por lado y planta
-DOOR = 1.6                          # ancho de puerta de aula
+DOOR = 2.4                          # ancho de puerta de aula (holgado: evita que el
+                                    # agente se trabe en la jamba al girar hacia el pasillo)
 OPEN = 6.0                          # ancho de aberturas (esquinas / salidas)
 
 LEFT_ROOM_CX = sum(LEFT_ROOMS_X) / 2
@@ -149,22 +150,47 @@ def build_stairs() -> list[tuple]:
     ]
 
 
-def build_targets() -> list[tuple]:
-    # AULA: un punto CIRCLE en el centro de cada aula, en ambas plantas (16).
-    out = []
+AULA_MARGIN = 1.0                   # inset del recinto del aula respecto de sus paredes
+
+
+def build_aula_rooms() -> list[tuple]:
+    """Recinto (rectángulo) de cada aula: (base, id, x0, y0, x1, y1, z).
+
+    8 aulas por planta (4 bandas × {izquierda, derecha}); base ``AULA_PB`` en
+    PB (z=0) y ``AULA_P1`` en P1 (z=3). El rectángulo va inset ``AULA_MARGIN``
+    de las paredes del cuarto para que los alumnos se acomoden adentro."""
+    rooms = []
+    m = AULA_MARGIN
     for z in FLOORS:
-        for cy in room_centers_y():
-            out.append(("AULA", 0.5, LEFT_ROOM_CX, cy, z))
-            out.append(("AULA", 0.5, RIGHT_ROOM_CX, cy, z))
-    return out
+        base = "AULA_PB" if abs(z) < 1e-9 else "AULA_P1"
+        n = 0
+        for (y0, y1) in room_bounds():
+            for (rx0, rx1) in (LEFT_ROOMS_X, RIGHT_ROOMS_X):
+                n += 1
+                rooms.append((base, n, rx0 + m, y0 + m, rx1 - m, y1 - m, z))
+    return rooms
+
+
+def build_targets() -> list[tuple]:
+    # Las aulas ya NO son TARGETs (capacidad-1): pasaron a servers CLASSROOM
+    # (recinto colectivo con timbre; ver build_servers / build_parameters). El
+    # baseline no tiene targets puntuales.
+    return []
 
 
 def build_servers() -> list[tuple]:
-    # Kiosco en una esquina del recreo (server queue + línea de cola).
-    return [
-        ("KIOSCO_1_SERVER", 5.0, 50.0, 0.0, 8.0, 52.0, 0.0),
-        ("KIOSCO_1_QUEUE000", 5.0, 49.5, 0.0, 5.0, 44.5, 0.0),
+    # Aulas como servers CLASSROOM: un rectángulo por aula, SIN filas _QUEUE
+    # (la ausencia de cola + type CLASSROOM en el JSON las hace "recinto con
+    # sesión"). 8 en PB (base AULA_PB, z=0) y 8 en P1 (base AULA_P1, z=3).
+    rows = [
+        (f"{base}_{n}_SERVER", x0, y0, z, x1, y1, z)
+        for (base, n, x0, y0, x1, y1, z) in build_aula_rooms()
     ]
+    # Kiosco en el recreo (server QUEUE + línea de cola); queda fuera del plan
+    # baseline (se usará en el sub-escenario de Ingreso/recreo).
+    rows.append(("KIOSCO_1_SERVER", 5.0, 50.0, 0.0, 8.0, 52.0, 0.0))
+    rows.append(("KIOSCO_1_QUEUE000", 5.0, 49.5, 0.0, 5.0, 44.5, 0.0))
+    return rows
 
 
 def build_exits() -> list[tuple]:
@@ -195,43 +221,94 @@ def _fmt(v):
     return str(v)
 
 
+# ── Parámetros de la simulación baseline (día escolar) ───────────────────────
+# Ventana de llegada FINITA: los alumnos ingresan durante los primeros
+# ARRIVAL_WINDOW segundos y después el generador se apaga (inactive_time enorme
+# = un único ciclo activo, no un goteo perpetuo). Así el edificio se llena y
+# luego se vacía, mostrando el día completo (ingreso → clase → evacuación).
+#
+# Nota de semántica del generador (ver ConfigurablePedestrianGenerator): el par
+# (active_time, inactive_time) define un CICLO que se repite; con
+# inactive_time=0 el generador RE-ARRANCA indefinidamente (nunca deja de
+# spawnear). Para un único burst finito se pone inactive_time >> max_time.
+ARRIVAL_WINDOW = 60.0        # s de ingreso continuo (luego el generador se apaga)
+NEVER_REACTIVATE = 1.0e6     # inactive_time centinela: no vuelve a generar
+MAX_TIME = 250.0             # s totales (deja vaciar el edificio tras el timbre)
+GEN_PERIOD = 3.0             # cada cuánto llega un lote a cada entrada
+GEN_QTY = (1.0, 2.0)         # tamaño del lote (uniforme) → caudal ≈ 30 p/min/entrada
+# Aulas = servers CLASSROOM con UNA sesión (limitación de Formato B): liberan a
+# TODOS los alumnos de una en t_init + CLASS_SESSION (el "timbre"). Como el aula
+# es el primer paso del plan, los alumnos se delegan al spawnear (dentro de la
+# ventana de ingreso), así que con el timbre DESPUÉS de esa ventana ninguno
+# queda atrapado. Modelo: llegan → clase → timbre → todos evacúan.
+CLASS_START = 0.0            # t_init de la sesión de clase
+CLASS_SESSION = 140.0        # duración → timbre (dismissal) en CLASS_START + CLASS_SESSION
+
+
+def _classroom(block_name: str) -> dict:
+    # Aula como server CLASSROOM: type EXPLÍCITO (no depender de la inferencia),
+    # UNA sola sesión (start_time = CLASS_START, duración = CLASS_SESSION →
+    # dismissal en su suma). attending_time_distribution determinística porque
+    # el CLASSROOM no muestrea: usa el valor representativo como t_mean.
+    return {
+        "block_name": block_name,
+        "type": "CLASSROOM",
+        "attending_time_distribution": {"type": "UNIFORM", "min": CLASS_SESSION, "max": CLASS_SESSION},
+        "start_time": CLASS_START,
+        "max_capacity": 40,
+    }
+
+
 def build_parameters() -> dict:
-    # Baseline (paso 8.1): los agentes entran por ambas entradas y van a un aula al
-    # azar (puede estar en P1 → suben por una escalera), asisten la clase y salen
-    # por una salida al azar. Demuestra el ruteo multiplanta de punta a punta.
-    # El kiosco queda definido en la geometría (recreo) para los sub-escenarios
-    # (8.2): no se incluye en el plan baseline para no crear un cuello de botella
-    # de un único server con ~todos los agentes.
+    # Baseline (día escolar, 1 período): los alumnos entran por ambas entradas
+    # durante la ventana de llegada. Según el plan que les toca (CLASE_PB o
+    # CLASE_P1, ~50/50), van a un aula de PB o de P1 (estas últimas subiendo por
+    # una escalera), asisten la clase (server CLASSROOM), y al TIMBRE (dismissal
+    # sincronizado) todos evacúan por una salida al azar. Los dos planes
+    # diferenciados reparten la población entre plantas SIN el sesgo que producía
+    # el modelo viejo de aulas capacidad-1. El kiosco (server QUEUE) queda en la
+    # geometría del recreo pero fuera del plan baseline (sub-escenario Ingreso).
     gen_agents = {
         "min_radius_distribution": {"type": "UNIFORM", "min": 0.15, "max": 0.15},
         "max_radius_distribution": {"type": "UNIFORM", "min": 0.30, "max": 0.32},
         "max_velocity": 1.4,
     }
-    generation = {"period": 3.0, "quantity_distribution": {"type": "UNIFORM", "min": 1.0, "max": 2.0}}
+    generation = {"period": GEN_PERIOD,
+                  "quantity_distribution": {"type": "UNIFORM", "min": GEN_QTY[0], "max": GEN_QTY[1]}}
+    # Pool de planes por generador: el ConfigurablePedestrianGenerator elige uno
+    # al azar por agente entre los separados por '|' → ~50/50 PB/P1.
     generators = [
-        {"block_name": b, "plan": "DIA_ESCOLAR", "agents": gen_agents,
-         "active_time": 40.0, "inactive_time": 0.0, "generation": generation}
+        {"block_name": b, "plan": "CLASE_PB|CLASE_P1", "agents": gen_agents,
+         "active_time": ARRIVAL_WINDOW, "inactive_time": NEVER_REACTIVATE, "generation": generation}
         for b in ("INGRESO_RECREO", "INGRESO_EDIFICIO")
     ]
+
+    def clase_plan(name: str, aula_group: str) -> dict:
+        # Un aula (server del grupo) y después una salida al azar (exit_selection).
+        return {
+            "name": name,
+            "exit_selection": "RANDOM",
+            "objective_groups": [
+                {"block_name": aula_group, "layer": "SERVERS", "objective_selection": "RANDOM"},
+            ],
+        }
+
     return {
-        "max_time": 200.0,
+        "max_time": MAX_TIME,
         "output_delta_time": 0.2,
         "blueprint_name": "escuela",
         "agents_generators": generators,
-        "targets": [
-            {"block_name": "AULA",
-             "attending_time_distribution": {"type": "UNIFORM", "min": 15.0, "max": 30.0}}
-        ],
+        "targets": [],
         "servers": [
+            _classroom("AULA_PB"),
+            _classroom("AULA_P1"),
             {"block_name": "KIOSCO",
              "attending_time_distribution": {"type": "GAUSSIAN", "mean": 8.0, "std": 2.0},
-             "max_capacity": 1}
+             "max_capacity": 1},
         ],
         "plans": [
-            {"name": "DIA_ESCOLAR", "exit_selection": "RANDOM", "objective_groups": [
-                {"block_name": "AULA", "layer": "TARGETS", "objective_selection": "RANDOM",
-                 "quantity_distribution": {"type": "UNIFORM", "min": 1.0, "max": 1.0}},
-            ]},
+            clase_plan("CLASE_PB", "AULA_PB"),
+            clase_plan("CLASE_P1", "AULA_P1"),
         ],
     }
 

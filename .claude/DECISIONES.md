@@ -443,3 +443,213 @@ con kiosco) y, sobre él, los sub-escenarios Evacuación e Ingreso.
 evacuación) e Ingreso (caudal en 1/5/10 min → población vs tiempo antes de la escalera principal), con
 sus barridos y gráficos.
 
+---
+
+## D13 — Baseline "día escolar" con generación FINITA (burst matinal) + puertas de aula holgadas
+
+- **Fecha:** 2026-07-01
+- **Estado:** vigente
+- **Paso del plan:** 8.1 (afinado del baseline para una animación representativa)
+
+**Contexto.** Al correr el baseline del D12 tal cual (`active_time=40, inactive_time=0`, `max_time=200`)
+la animación mostraba dos problemas: (1) **el edificio nunca se vaciaba** —población ~82/84 al final,
+sólo 18/100 evacuaban— y (2) **congestión severa** en el pasillo central. La causa de (1) es la
+semántica del `ConfigurablePedestrianGenerator`: `(active_time, inactive_time)` definen un **ciclo que
+se repite**; con `inactive_time=0` el generador **re-arranca indefinidamente** (`advancePhase` →
+`startNewCycle`), es decir spawnea durante toda la simulación (~5 agentes cada 10 s por siempre). No
+es un total de agentes sino un caudal perpetuo. Se validó (corrida de control con generación finita)
+que con menos agentes **el ruteo multiplanta funciona de punta a punta**: el edificio se llena y se
+vacía, y los agentes que suben a P1 bajan por las escaleras a una salida (≈100% de bajada). O sea, el
+problema era de **configuración del escenario, no de los pasos 4–6**.
+
+**Decisión.** El baseline pasa a modelar un **día escolar con llegada finita**:
+- **Ventana de ingreso finita:** un único burst de llegada. En el builder (`build_escuela.py`):
+  `ARRIVAL_WINDOW = 60 s`, `inactive_time = 1e6` (centinela ≫ `max_time` ⇒ el generador entra en
+  INACTIVE tras el primer ciclo y no vuelve a spawnear). Caudal sin cambios (`period=3`,
+  `quantity∈[1,2]` ⇒ ~30 p/min/entrada, recortado por ancho de puerta a 18 y 12) ⇒ **~30 agentes**.
+- **`max_time = 240 s`** (antes 200): deja tiempo para que, tras la clase, el edificio **se vacíe**
+  (evacuación completa como parte del baseline).
+- **Puertas de aula holgadas: `DOOR = 2.4 m`** (antes 1.6). Mejora el flujo de evacuación y **mitiga
+  parcialmente** el atasco en jamba descripto en **D14** (no lo elimina).
+
+Resultado (≈30 agentes, `max_time=240`): 30/30 asisten clase, ~22 suben a P1 y **bajan por escalera**,
+~21/30 evacúan y la población sube a 30 (t≈60–90) y baja a ~14 (t=200). Animaciones: vista 3D apilada
+(`tools/visualize_simulation_3d.py`, stride 5) y 2D por planta (`tools/visualize_simulation.py --floor`,
+ahora con `--stride`).
+
+**Alternativas descartadas:**
+- *Mantener generación perpetua*: el edificio nunca se vacía → no se puede mostrar la evacuación ni
+  medir tiempos; además la congestión colapsa el throughput del único pasillo central.
+- *Cambiar la semántica del generador (que `active_time` sea un total)*: tocaría un módulo estable con
+  tests; el centinela `inactive_time` logra el burst finito sin tocar código.
+
+**Motivo.** Da una animación con narrativa completa (ingreso → clase → evacuación por escaleras) y
+prepara el terreno del 8.2 (el burst finito es justo el input "caudal" del sub-escenario Ingreso; una
+ocupación inicial en aulas sería el de Evacuación).
+
+---
+
+## D14 — Atasco en jamba de puerta (livelock CPM): diagnóstico e intento de fix revertido
+
+- **Fecha:** 2026-07-01
+- **Estado:** diagnóstico vigente — **resuelto en D17** (contacto de pared a rmin)
+- **Paso del plan:** 8.1 (comportamiento raro detectado en la animación)
+
+**Contexto.** En la animación afinada (D13) ~1–2 de 30 agentes quedan **oscilando pegados a la pared del
+pasillo (x=48), en la jamba de una puerta de aula**, tras la clase, sin llegar nunca a la salida
+(WALKING con desplazamiento neto ~0 durante 60–90 s). Reproducible en esa geometría (puertas del lado
+derecho), aunque *qué* agentes caen varía porque la generación usa `new Random()` sin seed.
+
+**Diagnóstico (con `-Dsimped.hopLog` + inspección de `vx,vy`).** **No es un bug de ruteo:** el hop es
+estable y visible (`visJava=1`) y apunta correctamente al pasillo-sur camino a la salida. La causa está
+**aguas arriba, en el modelo de fuerzas del CPM**: el agente sale del aula hacia una salida lejana casi
+**colineal con la pared**, así que su dirección deseada es casi paralela al muro y queda a ~0.2 m de la
+jamba. Como `0.2 m < radius` (hasta `rmax=0.3`), el CPM lo clasifica como **contacto con pared** y aplica
+la **velocidad de escape perpendicular** (lo aleja del muro, hacia el centro de la puerta); esa fuerza
+**pelea contra el pull del target** (que lo trae de vuelta hacia la jamba) ⇒ la velocidad alterna entre
+"escape" (aleja) y "target" (acerca) y el agente **oscila sin cruzar** el hueco.
+
+**Intento de fix (revertido).** Se probó reforzar `CpmOperationalModel.moveWithWallCheck` (fan de escape
+anti-deadlock y luego un "fan con score por proyección" que elige la dirección libre de menor desvío
+respecto a la deseada, en vez del slide al sentido opuesto). **No resuelve** el caso: el atasco ocurre
+*antes* del anti-tunneling —la velocidad de escape del contacto-pared ya es un paso válido (perpendicular,
+hacia el hueco), así que `moveWithWallCheck` ni siquiera llega a sus fallbacks—. Como el cambio tocaba
+código tuneado/testeado sin resolver el problema objetivo, **se revirtió** (el CPM quedó idéntico al
+original; los 149 tests siguen verdes). La **mitigación parcial** aplicada es de escenario: puertas más
+anchas (D13, `DOOR=2.4`), que bajan la incidencia pero no la eliminan.
+
+**Opciones de fix real (a decidir con el usuario, para el paso de afinado):**
+1. **Ruteo con waypoint en el centro de la puerta:** que el FVP no "vea a través" del hueco hasta un
+   punto lejano casi-colineal con la pared, sino que primero apunte al centro del vano (cruce
+   perpendicular) y recién después al destino. Ataca la causa (dirección deseada casi paralela al muro).
+2. **Contacto-pared con umbral `rmin` (núcleo duro) en vez de `radius`/`rmax`:** que la pared cuente como
+   "contacto" (y dispare escape) sólo cuando el cuerpo físico penetraría, no dentro del espacio personal.
+   Es un cambio de calibración del CPM (afecta cuán cerca de los muros caminan los agentes).
+3. **Aulas como server `CLASSROOM`** (ver pendientes de afinado): cambia la geometría/flujo de salida y
+   podría evitar el patrón de salida colineal con la pared.
+
+**Motivo de registrarlo.** Es el "comportamiento raro" pedido; el diagnóstico (contacto-pared vs. target
+en jamba) es material directo para el informe y la elección del fix conviene consensuarla porque toca
+física (CPM) o ruteo (Graph), no sólo el escenario.
+
+
+---
+
+## D15 — Aulas como server `CLASSROOM` + planes diferenciados PB/P1 + timbre único
+
+- **Fecha:** 2026-07-01
+- **Estado:** vigente
+- **Paso del plan:** 8.1 (afinado de servers/planes)
+
+**Contexto.** El baseline modelaba las aulas como **TARGETs capacidad-1** (un punto por aula, dwell
+individual). Problemas: (a) un aula alojaba **un solo alumno** (irreal), y (b) como las aulas de PB se
+saturaban primero, los agentes rebotaban a P1 → **sesgo ~77% a P1**. El código ya tiene el tipo de
+server `CLASSROOM` ("recinto colectivo con sesiones; libera a todos los presentes en `t_init+t_mean`").
+
+**Decisión.**
+- **Cada aula = un server `CLASSROOM`** (rectángulo del recinto, sin filas `_QUEUE`, `type:"CLASSROOM"`
+  explícito). 8 en PB (base `AULA_PB`, z=0) y 8 en P1 (base `AULA_P1`, z=3). Cada base es un **grupo
+  lógico**: el módulo reparte a sus 8 miembros por softmax (carga+distancia). Los alumnos ya no son
+  capacidad-1 → un aula aloja muchos.
+- **Un base por planta** (no un único grupo `AULA` con ambas): evita el gotcha del foot-target de grupo
+  (que toma la `z` del primer miembro). Para repartir población entre plantas se usan **planes
+  diferenciados**: `CLASE_PB` (→ grupo `AULA_PB`) y `CLASE_P1` (→ grupo `AULA_P1`), ambos con
+  `exit_selection: RANDOM` para la salida. El generador recibe el **pool** `"CLASE_PB|CLASE_P1"` y elige
+  uno al azar por agente (~50/50). Esto **elimina el sesgo** (el reparto ya no depende de saturación) y
+  cumple el pedido de "planes diferenciados".
+- **Timbre único (una sesión).** Formato B sólo admite **una** sesión por classroom (`sessionStarts =
+  [start_time]`): el aula libera a todos **una vez** en `start_time + t_mean`, y cualquier agente
+  delegado **después** queda atrapado. Como el aula es el **primer** paso del plan, los alumnos se
+  delegan al spawnear (dentro de la ventana de ingreso), así que con el **timbre después de esa ventana**
+  (`start_time=0`, `t_mean=CLASS_SESSION=140` ⇒ dismissal en t=140, ventana de ingreso 0–60) **ninguno
+  queda atrapado**. El modelo resultante es un **período de clase con dismissal sincronizado** (suena el
+  timbre → todos evacúan a la vez), realista y una buena antesala del sub-escenario Evacuación.
+- `max_time = 250` (para vaciar tras el timbre). Los alumnos figuran **`QUEUEING`** mientras están en el
+  aula (es el estado que el engine asigna "en el puesto"); en la animación se ven como el color de
+  QUEUEING dentro del recinto.
+
+**Resultado.** ~30 alumnos, ~50/50 PB/P1: **13/30 suben a P1 (y bajan por escalera), 27/30 asisten**,
+timbre limpio en t=140 (t=139: 29 en aula → t=142: 0), **29/30 evacúan**. Sin sesgo de planta, sin
+agentes atrapados.
+
+**Alternativas descartadas:**
+- *Seguir con TARGETs capacidad-1*: irreal y con sesgo a P1.
+- *Un único grupo `AULA` con las 16 aulas (ambas plantas)*: el foot-target del grupo colapsa a una
+  planta (gotcha conocido) → se usan dos grupos + dos planes.
+- *Múltiples sesiones / recreos* (varios timbres): requiere Formato A (`SERVER_PARAMS.csv`, una fila por
+  `t_init`), incompatible con el `parameters.json` (Formato B) del escenario. Queda para el futuro si
+  hace falta un día con varias clases.
+
+---
+
+## D16 — Migración 3D del módulo de Servers: `ServerZone.z` propagada + target fino en la planta del server
+
+- **Fecha:** 2026-07-01
+- **Estado:** vigente
+- **Paso del plan:** 8.1 (habilitar aulas-server en P1; completa la migración 3D del módulo de servers)
+
+**Contexto.** Al modelar las aulas como servers (D15), **ningún** agente de `CLASE_P1` subía a P1
+(`maxz=0`). Diagnóstico (debug de targets + inspección): el **módulo de Servers nunca se migró a 3D** —
+no hacía falta porque el único server (kiosco) estaba en PB y las aulas eran TARGETs (que sí son 3D).
+Dos gaps encadenados:
+1. **`GeometryAssembler.buildServers` tiraba la `z`**: construía el `ServerZone` con el overload de
+   conveniencia que fija `z=0` (`ServerZone(base, id, area, queues, type, params)`), ignorando
+   `serverRow.z()` (que el `ServersCsvReader` sí parseaba bien, =3 para P1). ⇒ todas las aulas quedaban
+   en z=0.
+2. **`ServersWiring` ubicaba el target fino en la `z` del AGENTE**: el relay del `TargetSink` (I13b)
+   hacía `target.withZ(impl.state().z())` con un comentario "Fase A: una sola planta → z del agente". Un
+   alumno de `CLASE_P1` caminando aún por PB (z=0) recibía el target del aula con z=0 → nunca subía.
+
+**Decisión (fixes).**
+- **`GeometryAssembler`**: pasar `serverRow.z()` al `ServerZone` (usar el ctor de 7 args). Ahora
+  `ServerZone.z()` = planta real del server (3 para P1).
+- **`ServersWiring`**: el target fino se ubica en la **planta del server delegado**, no en la del agente.
+  El módulo (planar en `xy`) expone `delegatedServerId(agentId)`; el wiring arma un mapa `serverId → z`
+  (de `ServerZone.z()`) y hace `target.withZ(zDelServer)` (fallback: `z` del agente). El
+  `ServersModule` **sigue planar** — sólo el target fino recupera la planta; `steppedOn`/posiciones
+  siguen en `xy` (la separación por delegación evita la ambigüedad PB/P1 que comparten `(x,y)`).
+
+**Alternativa descartada.** *Migrar todo el módulo de Servers a `Vec3`* (`TargetSink`, modelo `Server`,
+`positions`, tests): mucho más invasivo por una `z` que sólo hace falta en el target fino. El enfoque
+elegido es mínimo (2 archivos de producción) y deja los 149 tests verdes.
+
+**Motivo.** Completa la migración 3D para servers multiplanta (necesario para las aulas de P1) con el
+menor churn posible.
+
+---
+
+## D17 — CPM: contacto con pared al núcleo duro (rmin), no al espacio personal (rmax)
+
+- **Fecha:** 2026-07-01
+- **Estado:** vigente
+- **Paso del plan:** 8.1 (mejora del CPM pedida por el usuario; resuelve D14)
+
+**Contexto.** El D14 diagnosticó el atasco en esquinas/jambas: el CPM trataba la pared como **contacto**
+en cuanto el agente estaba dentro de su radio (que crece hasta `rmax=0.3`), y aplicaba la **velocidad de
+escape perpendicular** (`escapeVelocity`, magnitud `ve`), que **ignora el objetivo** y lo empuja lejos
+del muro. Cerca de una jamba, ese escape (perpendicular, ~1.5 m/s) alternaba con el pull del target
+(hacia el hueco) → **oscilación en el lugar**. Un intento previo de arreglarlo en el anti-tunneling
+(`moveWithWallCheck`) se revirtió porque la causa estaba aguas arriba (en las fuerzas), no en el
+anti-tunneling.
+
+**Decisión.** En `CpmOperationalModel.collectContactDirections`, la pared cuenta como **contacto**
+(dispara la velocidad de escape) sólo cuando el **cuerpo físico** del agente la tocaría, es decir
+`d ≤ rmin` (núcleo duro), en vez de `d ≤ radius` (espacio personal expandido, hasta `rmax`). En la franja
+`rmin..rmax` la **repulsión suave de pared** (`n_w_c = Aw·exp(-d/Bw)`, rama de avoidance del A-CPM) ya
+aparta al agente sin anular el pull al objetivo → **dobla esquinas y cruza puertas** en lugar de rebotar.
+Es coherente con el criterio de contacto **anisotrópico** que el A-CPM ya usa para agente-agente (el
+escape isotrópico duro sólo al radio mínimo). El **anti-tunneling** (`moveWithWallCheck`) queda intacto:
+sigue impidiendo atravesar paredes, así que acercarse más al muro no genera tunneling.
+
+**Resultado (escenario Escuela, mismo setup).** El "oscilar-en-la-esquina" (ventanas de ~3 s en estado
+de movimiento con desplazamiento neto < 0.5 m) cayó de **20.1% → 5.5%** de las ventanas en movimiento
+(**~3.6×**); los agentes atascados al final pasaron de **2/30 → 0/30**; y el tiempo total en estado de
+"deambular" bajó ~15%. El 5.5% remanente es congestión legítima (esperar para entrar al aula / hacer
+fila detrás de otros), no pegado a la pared. **149 tests verdes** (incluida la parte de anti-tunneling
+del `CpmOperationalModelStairTest`).
+
+**Alternativas descartadas:**
+- *Reforzar `moveWithWallCheck`* (fan de escape / slide por proyección): ataca el síntoma, no la causa
+  (la velocidad deseada ya venía perpendicular por el escape) — se había probado y revertido (D14).
+- *Bajar `ve` global o el rango del avoidance de pared (`Aw`,`Bw`)*: descalibra el A-CPM en todos lados;
+  el cambio de umbral de contacto es local y respeta la calibración publicada de la repulsión suave.

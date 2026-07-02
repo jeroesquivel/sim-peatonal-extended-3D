@@ -673,14 +673,21 @@ public final class CpmOperationalModel implements OperationalModel {
                 }
             } else if (neighbor.type() == NeighborType.WALL) {
                 double d = neighbor.distance();
-                if (d <= self.radius() && d > 0.0) {
+                // La pared cuenta como CONTACTO (dispara la velocidad de escape
+                // perpendicular, que ignora el objetivo) sólo cuando el CUERPO
+                // FÍSICO del agente (rmin, núcleo duro) la tocaría — no dentro de
+                // todo su espacio personal expandido (hasta rmax). En la franja
+                // rmin..rmax la repulsión SUAVE de pared (Aw·exp(-d/Bw), rama de
+                // avoidance) ya lo aparta sin anular el pull al objetivo, así el
+                // agente DOBLA esquinas / cruza puertas en vez de rebotar y
+                // quedarse pegado en la jamba (bug D14). El anti-tunneling
+                // (moveWithWallCheck) sigue impidiendo atravesar la pared.
+                if (d <= rmin && d > 0.0) {
                     int wallId = neighbor.id();
                     if (wallId >= 0 && wallId < this.walls.size()) {
                         Vec2 w = this.walls.get(wallId).closestPointTo(selfPos);
                         Vec2 toAgent = selfPos.sub(w);
-                        if (d > 0.0) {
-                            dirs.add(toAgent.scale(1.0 / d));
-                        }
+                        dirs.add(toAgent.scale(1.0 / d));
                     } else {
                         throw new IllegalStateException("Wall neighbor ID " + wallId + " is out of bounds for the loaded walls list.");
                     }

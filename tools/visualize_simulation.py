@@ -332,19 +332,31 @@ def render_video(
     target_artists: list = []
     trail_artists: list = []
 
+    show_hops = hops_by_track is not None and len(hops_by_track) > 0
+
+    # Leyenda: los ESTADOS de agente que realmente aparecen en la corrida (en
+    # orden de ciclo de vida) + las entradas de hops sólo si se muestran hops.
+    # Se ubica FUERA del área del plot (margen derecho) para no solaparse nunca
+    # con el recuadro de tiempo (arriba-izquierda).
+    present_states = {a["state"] for frame in frames for a in frame}
+    state_order = ["IDLE", "WALKING", "APPROACHING", "ARRIVED", "OCCUPYING", "LEAVING", "QUEUEING"]
     legend_handles = [
-        mpatches.Patch(color="#27ae60", label="WALKING (agente)"),
-        mpatches.Patch(color="#e67e22", label="Hop (nextVisibleHop)"),
-        mpatches.Patch(color="#8e44ad", label="Target final"),
-        mpatches.Patch(color="#c0392b", label="Hop NO visible (pared)"),
+        mpatches.Patch(color=STATE_COLORS[s], label=s)
+        for s in state_order if s in present_states
     ]
-    ax.legend(handles=legend_handles, loc="upper right", fontsize=8)
+    if show_hops:
+        legend_handles += [
+            mpatches.Patch(color="#e67e22", label="Hop (nextVisibleHop)"),
+            mpatches.Patch(color="#8e44ad", label="Target final"),
+            mpatches.Patch(color="#c0392b", label="Hop NO visible (pared)"),
+        ]
+    fig.subplots_adjust(right=0.80)
+    ax.legend(handles=legend_handles, loc="upper left", bbox_to_anchor=(1.02, 1.0),
+              fontsize=8, title="Estado del agente", framealpha=0.95)
     ax.set_xlabel("x (m)")
     ax.set_ylabel("y (m)")
-    ax.set_title("Simulación peatonal + hops del grafo")
+    ax.set_title("Simulación peatonal" + (" + hops del grafo" if show_hops else ""))
     ax.grid(True, alpha=0.2)
-
-    show_hops = hops_by_track is not None and len(hops_by_track) > 0
 
     def clear_overlay():
         for art in hop_artists + target_artists + trail_artists:
@@ -461,6 +473,8 @@ def main():
     parser.add_argument("--format", choices=("gif", "mp4"), default=None)
     parser.add_argument("--floor", type=float, default=None,
                         help="Planta (z) a animar en 2D; omitir para mostrar todas superpuestas")
+    parser.add_argument("--stride", type=int, default=1,
+                        help="Submuestrear 1 de cada N frames (outputs largos)")
     args = parser.parse_args()
 
     fmt = args.format or ("mp4" if args.out.lower().endswith(".mp4") else "gif")
@@ -468,6 +482,8 @@ def main():
     servers_path = os.path.join(args.scenario, "SERVERS.csv")
 
     frames = load_frames_with_times(args.output, args.floor)
+    if args.stride > 1:
+        frames = frames[::args.stride]  # submuestreo para outputs largos
     walls = parse_walls(walls_path, args.floor)
     servers = parse_servers(servers_path, args.floor)
 

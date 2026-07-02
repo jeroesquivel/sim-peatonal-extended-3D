@@ -151,8 +151,11 @@ public final class GeometryAssembler {
             }
 
             try {
+                // Propagar la planta del server (serverRow.z()): sin esto se usaba
+                // el overload que fija z=0 y los servers de plantas altas (aulas de
+                // P1) quedaban en la planta baja (bug de migración 3D).
                 out.add(new ServerZone(serverRow.base(), serverRow.id(),
-                        serverRow.area(), queues, type, sParams));
+                        serverRow.area(), serverRow.z(), queues, type, sParams));
             } catch (IllegalArgumentException e) {
                 acc.add(ValidationCode.V11,
                         "ServerZone[" + serverRow.base() + "#" + serverRow.id() + "]",

@@ -295,9 +295,32 @@ sirven de referencia de cómo se generan los CSV, pero **no forman parte de este
 
 ## Estado del trabajo y pendientes (retomar acá)
 
-**Última sesión: 2026-06-30.** El núcleo 3D está cerrado y validado end-to-end con un escenario
-real de 2 plantas. La fuente de verdad de las decisiones es [`DECISIONES.md`](./DECISIONES.md)
-(D1–D12).
+**Última sesión: 2026-07-01.** Se afinó el baseline de la Escuela para una animación con narrativa
+completa (ingreso → clase → evacuación por escaleras) y se diagnosticó un comportamiento raro. La
+fuente de verdad de las decisiones es [`DECISIONES.md`](./DECISIONES.md) (D1–D14).
+
+**Hecho esta sesión (2026-07-01):**
+- **Baseline "día escolar" con generación FINITA** (D13): el `inactive_time=0` del D12 hacía que el
+  generador spawneara para siempre (edificio nunca se vaciaba, sólo 18/100 evacuaban). Se cambió a un
+  **burst matinal finito** (`ARRIVAL_WINDOW=60`, `inactive_time=1e6`, `max_time=240`, `DOOR=2.4`) ⇒ ~30
+  agentes. Resultado validado: **30/30 asisten clase, ~22 suben a P1 y bajan por escalera, ~23/30
+  evacúan**; la población sube a 30 (t≈60–90) y baja a ~13 (t=200). Animaciones regeneradas: 3D apilada
+  + 2D por planta (`--stride` nuevo en `tools/visualize_simulation.py`).
+- **Comportamiento raro diagnosticado** (D14): ~1–2/30 agentes quedan oscilando en la **jamba de una
+  puerta de aula** al salir hacia una salida lejana. Diagnóstico (hop-log + `vx,vy`): **no es ruteo** —
+  es el CPM tratando la jamba como *contacto de pared* y aplicando escape perpendicular que pelea con el
+  pull del target. Un intento de fix en `moveWithWallCheck` **no lo resuelve** (la causa está aguas
+  arriba, en el modelo de fuerzas) y **se revirtió**; el CPM quedó idéntico al original (149 tests
+  verdes). Mitigación parcial aplicada: puertas más anchas. **Fix real pendiente de decidir** (ver D14).
+  Nota: sigue presente con el modelo CLASSROOM (afecta 2/30 al evacuar).
+- **Afinado de servers/planes** (D15, D16): las aulas pasaron de TARGETs capacidad-1 a **servers
+  `CLASSROOM`** (recinto colectivo). 8 en PB (`AULA_PB`) + 8 en P1 (`AULA_P1`), **planes diferenciados**
+  `CLASE_PB`/`CLASE_P1` asignados ~50/50 por el generador (pool `"CLASE_PB|CLASE_P1"`) → **elimina el
+  sesgo a P1**. **Timbre único** (dismissal sincronizado) a t=140. Al implementarlo se descubrió que el
+  **módulo de Servers no estaba migrado a 3D**: `GeometryAssembler` tiraba la `z` del `ServerZone` (aulas
+  de P1 caían a z=0) y `ServersWiring` ubicaba el target fino en la `z` del agente, no del server. **Se
+  arreglaron ambos** (D16). Resultado: 13/30 suben a P1 y bajan, 26/30 asisten, timbre limpio, 28/30
+  evacúan. **149 tests verdes.**
 
 **Hecho (pasos 1–7 + 8.1):**
 - Pasos **1–7** completos: `Vec3` + `AgentState.z` (D1, D2), input propaga `z` + escaleras (D3, D4),

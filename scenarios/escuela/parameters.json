@@ -1,11 +1,11 @@
 {
-    "max_time": 200.0,
+    "max_time": 250.0,
     "output_delta_time": 0.2,
     "blueprint_name": "escuela",
     "agents_generators": [
         {
             "block_name": "INGRESO_RECREO",
-            "plan": "DIA_ESCOLAR",
+            "plan": "CLASE_PB|CLASE_P1",
             "agents": {
                 "min_radius_distribution": {
                     "type": "UNIFORM",
@@ -19,8 +19,8 @@
                 },
                 "max_velocity": 1.4
             },
-            "active_time": 40.0,
-            "inactive_time": 0.0,
+            "active_time": 60.0,
+            "inactive_time": 1000000.0,
             "generation": {
                 "period": 3.0,
                 "quantity_distribution": {
@@ -32,7 +32,7 @@
         },
         {
             "block_name": "INGRESO_EDIFICIO",
-            "plan": "DIA_ESCOLAR",
+            "plan": "CLASE_PB|CLASE_P1",
             "agents": {
                 "min_radius_distribution": {
                     "type": "UNIFORM",
@@ -46,8 +46,8 @@
                 },
                 "max_velocity": 1.4
             },
-            "active_time": 40.0,
-            "inactive_time": 0.0,
+            "active_time": 60.0,
+            "inactive_time": 1000000.0,
             "generation": {
                 "period": 3.0,
                 "quantity_distribution": {
@@ -58,17 +58,30 @@
             }
         }
     ],
-    "targets": [
+    "targets": [],
+    "servers": [
         {
-            "block_name": "AULA",
+            "block_name": "AULA_PB",
+            "type": "CLASSROOM",
             "attending_time_distribution": {
                 "type": "UNIFORM",
-                "min": 15.0,
-                "max": 30.0
-            }
-        }
-    ],
-    "servers": [
+                "min": 140.0,
+                "max": 140.0
+            },
+            "start_time": 0.0,
+            "max_capacity": 40
+        },
+        {
+            "block_name": "AULA_P1",
+            "type": "CLASSROOM",
+            "attending_time_distribution": {
+                "type": "UNIFORM",
+                "min": 140.0,
+                "max": 140.0
+            },
+            "start_time": 0.0,
+            "max_capacity": 40
+        },
         {
             "block_name": "KIOSCO",
             "attending_time_distribution": {
@@ -81,18 +94,24 @@
     ],
     "plans": [
         {
-            "name": "DIA_ESCOLAR",
+            "name": "CLASE_PB",
             "exit_selection": "RANDOM",
             "objective_groups": [
                 {
-                    "block_name": "AULA",
-                    "layer": "TARGETS",
-                    "objective_selection": "RANDOM",
-                    "quantity_distribution": {
-                        "type": "UNIFORM",
-                        "min": 1.0,
-                        "max": 1.0
-                    }
+                    "block_name": "AULA_PB",
+                    "layer": "SERVERS",
+                    "objective_selection": "RANDOM"
+                }
+            ]
+        },
+        {
+            "name": "CLASE_P1",
+            "exit_selection": "RANDOM",
+            "objective_groups": [
+                {
+                    "block_name": "AULA_P1",
+                    "layer": "SERVERS",
+                    "objective_selection": "RANDOM"
                 }
             ]
         }
