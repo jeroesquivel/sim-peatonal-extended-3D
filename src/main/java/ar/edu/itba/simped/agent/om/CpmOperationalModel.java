@@ -39,6 +39,19 @@ public final class CpmOperationalModel implements OperationalModel {
     /** Velocidad lenta de acercamiento al slot en cola (evita orbitar). */
     private static final double QUEUE_APPROACH_SPEED = 0.55;
 
+    // --- Carriles subida/bajada en escalera (D19, contraflujo) ---
+    /** Ancho mínimo del tramo para separar dos carriles; por debajo, un solo
+     *  carril compartido (no hay espacio para el bias sin estrangular el paso). */
+    private static final double STAIR_LANE_MIN_WIDTH = 2.5;
+    /** Peso máximo (saturado) del bias de carril sobre la dirección deseada
+     *  {@code e_a}. Calibrado por el chief (D19): con 0.20 el bias era demasiado
+     *  débil y los carriles no se separaban (subida/bajada quedaban mezclados);
+     *  con 0.45 el contraflujo separa ~0.34 m (subida en +perp, bajada en -perp)
+     *  sin estrangular la evacuación densa (la repulsión entre agentes sigue
+     *  dominando y el tramo se usa completo). No afecta el baseline unidireccional
+     *  ni los tests (gateado por {@code stairLanes}, OFF por defecto). */
+    private static final double LANE_BIAS_WEIGHT = 0.45;
+
     // --- Regla de prioridad asimétrica en contacto (experimento Grupo 7) ---
     /** Diferencia de impulso (m/s) bajo la cual se considera "empate" y decide
      *  el desempate determinista por id. */
@@ -88,13 +101,20 @@ public final class CpmOperationalModel implements OperationalModel {
      *  null = usar el rmin que trae el perfil del agente. */
     private final Double rminOverride;
 
+    /** Bias lateral de carril en escalera (D19), gateado: OFF en el ctor legacy y
+     *  en {@link #fromGeometry(Geometry)} (delega con {@code false}) para que el
+     *  comportamiento por defecto —y todos los tests que usan esos dos— sea
+     *  byte-idéntico al de antes de los carriles. Sólo ON si se pide explícito
+     *  vía {@link #fromGeometry(Geometry, boolean)}. */
+    private final boolean stairLanes;
+
     /**
      * Constructor con lista de paredes explícita (1 planta / tests). Sin info de
      * plantas ni escaleras: el anti-tunneling usa la lista global y no hay física
      * de escalera. Comportamiento idéntico al 2D previo.
      */
     public CpmOperationalModel(List<Wall> walls) {
-        this(walls, null, null, List.of(), Map.of());
+        this(walls, null, null, List.of(), Map.of(), false);
     }
 
     /**
@@ -102,9 +122,20 @@ public final class CpmOperationalModel implements OperationalModel {
      * las escaleras desde {@link Geometry}. La lista global de paredes se arma con
      * el mismo orden que {@code FloorAwareNeighborsIndex.globalWalls} (concatenación
      * de {@code wallsOn(z)} sobre {@code floors()}) para que los {@code wallId} de
-     * los vecinos resuelvan.
+     * los vecinos resuelvan. Carriles de escalera OFF (ver {@link #fromGeometry(Geometry, boolean)}).
      */
     public static CpmOperationalModel fromGeometry(Geometry geometry) {
+        return fromGeometry(geometry, false);
+    }
+
+    /**
+     * Igual que {@link #fromGeometry(Geometry)}, con el bias lateral de carril en
+     * escalera (D19) gateado por {@code stairLanes}. Con {@code false} el
+     * comportamiento es idéntico al de siempre; con {@code true}, en tramos
+     * anchos (≥ {@link #STAIR_LANE_MIN_WIDTH}) se separan los carriles de
+     * subida/bajada (contraflujo).
+     */
+    public static CpmOperationalModel fromGeometry(Geometry geometry, boolean stairLanes) {
         List<Double> floors = geometry.floors();
         double[] levels = new double[floors.size()];
         List<List<Wall>> perFloor = new ArrayList<>(floors.size());
@@ -129,16 +160,17 @@ public final class CpmOperationalModel implements OperationalModel {
             if (fb != fa) union.addAll(perFloor.get(fb));
             stairWalls.put(s, union);
         }
-        return new CpmOperationalModel(global, levels, perFloor, stairs, stairWalls);
+        return new CpmOperationalModel(global, levels, perFloor, stairs, stairWalls, stairLanes);
     }
 
     private CpmOperationalModel(List<Wall> walls, double[] floorLevels,
                                 List<List<Wall>> floorWalls, List<Stairs> stairs,
-                                Map<Stairs, List<Wall>> stairWalls) {
+                                Map<Stairs, List<Wall>> stairWalls, boolean stairLanes) {
         if (walls == null) {
             throw new IllegalArgumentException("Walls list cannot be null");
         }
         this.walls = walls;
+        this.stairLanes = stairLanes;
         this.floorLevels = floorLevels;
         this.floorWalls = floorWalls;
         this.stairs = stairs;
@@ -197,11 +229,14 @@ public final class CpmOperationalModel implements OperationalModel {
         double speedScale = onStair != null ? onStair.speedFactor() : 1.0;
         List<Wall> floorWalls = floorWallsFor(state, onStair);
 
-        integratePlanar(state, footTarget3, behavior, neighbors, dt, speedScale, floorWalls);
+        integratePlanar(state, footTarget3, behavior, neighbors, dt, speedScale, floorWalls, onStair);
 
         if (onStair != null) {
             // z = lerp(foot.z, top.z, avance planar): la altura sigue al progreso
-            // (x,y) del agente sobre el eje de la escalera.
+            // (x,y) del agente sobre el eje de la escalera (D2). Como el agente entra
+            // al tramo por el PIE (avance ≈0, ver D21: exclusión de la huella del
+            // grafo + STAIR_FOOT_REACH chico), la z engancha desde el nivel del piso y
+            // crece suave; no hay salto por frame.
             state.setZ(onStair.zAt(state.x(), state.y()));
         }
     }
@@ -249,7 +284,8 @@ public final class CpmOperationalModel implements OperationalModel {
             List<Neighbor> neighbors,
             double dt,
             double speedScale,
-            List<Wall> floorWalls
+            List<Wall> floorWalls,
+            Stairs onStair
     ) {
         // La dinámica del CPM es planar (D1): se opera sobre la proyección xy del
         // foot-target. La z del agente (planta / escalera) la maneja el wrapper
@@ -501,6 +537,33 @@ public final class CpmOperationalModel implements OperationalModel {
             // Combine target, walls, and pedestrians to compute avoidance direction e_a
             Vec2 sumVectors = sum_n_c_j.add(n_w_c).add(e_t);
             Vec2 e_a = sumVectors.norm() > 0.0 ? sumVectors.normalized() : e_t;
+
+            // Bias de carril subida/bajada en escalera ancha (D19, contraflujo).
+            // Gateado por stairLanes (OFF por defecto: no cambia el baseline ni
+            // los tests). Sólo en tramos con espacio para dos carriles
+            // (width >= STAIR_LANE_MIN_WIDTH); si no, un solo carril compartido.
+            // Corrección PERPENDICULAR gentil, no un reemplazo del target: mezcla
+            // en e_a un versor hacia el centro del carril asignado, con peso
+            // proporcional al desvío lateral actual y saturado en LANE_BIAS_WEIGHT,
+            // para no pelear con el escape de contacto (que ya separa cuerpos) ni
+            // estrangular el flujo denso (la repulsión entre agentes sigue
+            // dominando y el tramo se usa completo en evacuación).
+            if (onStair != null && stairLanes && onStair.width() >= STAIR_LANE_MIN_WIDTH
+                    && footTarget3 != null) {
+                boolean ascending = footTarget3.z() > state.z();
+                Vec2 laneCenter = onStair.laneTargetAt(pos.x(), pos.y(), ascending).xy();
+                Vec2 toLane = laneCenter.sub(pos);
+                double lateralDev = toLane.norm();
+                if (lateralDev > 1e-9) {
+                    Vec2 laneDir = toLane.scale(1.0 / lateralDev);
+                    double weight = Math.min(LANE_BIAS_WEIGHT,
+                            LANE_BIAS_WEIGHT * (lateralDev / onStair.laneOffset()));
+                    Vec2 blended = e_a.scale(1.0 - weight).add(laneDir.scale(weight));
+                    if (blended.norm() > 0.0) {
+                        e_a = blended.normalized();
+                    }
+                }
+            }
 
             // Compute desired velocity based on the updated avoidance direction
             v = desiredVelocity(state, behavior, e_a, profile, speedScale);

@@ -691,3 +691,291 @@ así que un `double spawnZ` alcanza.
 **Relación.** Es el gemelo de D16 (servers): ambos son el mismo patrón de gap (ctor de conveniencia que
 defaultea z=0 + wiring 2D) que la migración 3D original no cubrió porque no había servers/generadores en
 plantas altas hasta el escenario Escuela multiplanta.
+
+
+---
+
+## D19 — Escalera realista (Task 3): switchback con descanso, confinamiento, carriles de contraflujo, peldaños y calibración
+
+- **Fecha:** 2026-07-02
+- **Estado:** vigente (ver **D21**: fix posterior del "salto de z" al pie de la escalera —
+  exclusión de la huella de la grilla del grafo + `STAIR_FOOT_REACH` 1.5→0.15 medido a lo largo del eje)
+- **Paso del plan:** Task 3 (hacer la escalera más realista sobre el escenario Escuela)
+
+**Contexto.** La escalera del baseline (D4/D9) era un **único tramo recto** (eje pie→tope, ancho 2.0,
+sin barandas propias más allá de las paredes de las puntas) dibujado como una **línea inclinada
+punteada**. La Task 3 pide 5 elementos: (1) switchback con descanso, (2) paredes de confinamiento /
+baranda (el agente no se sale de la huella), (3) carriles subida/bajada (contraflujo), (4) peldaños en
+el render 3D, (5) velocidad efectiva calibrada (~0.5–0.6 m/s) con `z` monótona. Restricción dura: **149
+tests verdes** y **no romper el ruteo multiplanta**.
+
+**Decisión arquitectónica (fijada por el overseer).** El switchback se modela como **DOS `Stairs`
+(dos tramos, A y B) unidos por un piso de descanso (landing) a `z = FLOOR_H/2 = 1.5`**, reutilizando
+**toda la maquinaria multiplanta existente sin reescribir el core**:
+- `Geometry.floors()` deriva `[0, 1.5, 3]` automáticamente al haber paredes del landing a z=1.5.
+- El grafo genera una grilla por planta (incluida la del landing) y la une por las aristas de escalera:
+  tramo A une piso0↔landing, tramo B une landing↔piso1. A* encadena piso0 → pie A → tope A (landing) →
+  grilla-landing → pie B → tope B (piso1). Heurística euclídea 3D ya correcta.
+- El CIM (`FloorAwareNeighborsIndex`) clasifica por z (z=0.75→tramo A, z=1.5→grilla landing, z=2.25→B).
+- El CPM interpola `z` por tramo; `stairWalls` de cada tramo = unión de las paredes de las dos plantas
+  que conecta (el agente sobre el tramo siente sus barandas).
+
+**Cambios (3 piezas disjuntas).**
+- **Java core (`core/Stairs`, `agent/om/CpmOperationalModel`, `environment/graph/NavigationGraph`,
+  `App`):**
+  - `Stairs` gana métodos **derivados** de foot/top/width (sin campos nuevos, no rompe los ~17
+    call-sites): `axisDirXy`, `perpXy`, `laneOffset`=width/4, `laneTargetAt(px,py,ascending)` (centro
+    del carril asignado, proyectando sobre el eje y desplazando ±laneOffset perpendicular).
+  - `CpmOperationalModel`: nuevo factory `fromGeometry(Geometry, boolean stairLanes)` y campo
+    `stairLanes`; el `fromGeometry(Geometry)` de 1-arg delega con `false`. **Bias lateral de carril
+    gateado:** cuando `onStair != null && stairLanes && onStair.width() >= STAIR_LANE_MIN_WIDTH(2.5)`,
+    mezcla en la dirección deseada `e_a` un versor hacia `laneTargetAt(x,y, ascending=footTarget.z>z)`
+    con peso saturado `LANE_BIAS_WEIGHT`. **Byte-idéntico con `stairLanes=false`** (los tests usan el
+    1-arg / el ctor `List<Wall>` → OFF). `App.java` pasa `true` en runs reales.
+  - `NavigationGraph.stairTraversalHop`: **guard de rango-z** — además de la distancia planar al eje,
+    exige que `agent.z()` caiga en `[min,max]` de la arista (±FLOOR_EPS) para no matchear el tramo
+    equivocado cuando A y B del mismo switchback quedan planar-cercanos.
+- **Builder (`tools/scenarios-builders/build_escuela.py`):** `build_stairs()` emite **4 filas** (2
+  tramos × 2 puntas SUR/NORTE) con landing a z=1.5; `build_stair_walls()` agrega barandas de cada tramo
+  (convención de plantas: tramo A→tag z=0, tramo B→tag z=1.5), perímetro del landing con huecos en las
+  dos bocas, y marco de la boca de llegada del tramo B. Geometría SUR final: tramo A `(43.4,7,0)→
+  (43.4,3,1.5)`, tramo B `(46.6,3,1.5)→(46.6,7,3)`, landing abierto x∈[42.1,47.9], y∈[0.5,3.0]; NORTE
+  espejado en y.
+- **Viz (`tools/visualize_simulation_3d.py` + `visualize_simulation.py`):** la línea punteada de
+  escalera se reemplaza por un **perfil de peldaños** (tread horizontal + riser vertical, N≈|Δz|/0.18
+  por tramo, color `#e67e22`); cada tramo se dibuja independiente (el switchback sale gratis). El 2D por
+  planta marca la huella de la escalera como rectángulo tenue.
+
+**Fixes de integración que expuso el switchback (los aplicó el chief, geometría/calibración):**
+1. **Landing straddleaba la línea de pies (bug de conectividad).** Con el landing a horcajadas de la
+   línea de pies (y∈[1.9,3.1] alrededor de y=2.5), la baranda del tramo B (que arranca en el pie)
+   tapiaba la mitad del landing y dejaba sólo un pasillo de cruce de 0.6 m: **8/14 agentes** que subían
+   quedaban a z=1.5 y se escapaban al norte por espacio no confinado. → El landing se re-ubicó
+   **enteramente del lado de la pared lejana** (arranca EN la línea de pies, `mouth_y==y_landing`, y se
+   extiende `STAIR_LANDING_DEPTH=2.5` hacia la pared lejana) → plataforma abierta para girar A→B.
+   Bajó a 2/14 atascados.
+2. **Escape a z=1.5 no confinado.** Un agente que llegaba a z=1.5 y recibía un hop viejo hacia el norte
+   caminaba por el plano z=1.5 (sin paredes al norte del landing en la huella del tramo A). → Se
+   **taggean las barandas del tramo A también a z=1.5** (además de z=0), simétricas a las del tramo B,
+   confinando la huella del tramo A en el landing floor. Con esto **0/14 atascados** y **30/30 evacúan**
+   (robusto en seeds 1,2,3,7).
+3. **Gate de carriles vs. ancho.** El bias de carril sólo engancha con `width ≥ 2.5`; el ancho 2.4 no
+   activaba. → Se **ensancha el tramo a 2.6** (STAIR_HALF_WIDTH=1.3; 2·2.6+gap 0.6 = 5.8 ≤ 6.0 del
+   corredor) para que los carriles funcionen.
+4. **Peso del bias de carril.** Con `LANE_BIAS_WEIGHT=0.20` los carriles **no se separaban** (medido en
+   un caso de contraflujo balanceado: subida y bajada quedaban mezclados, sep ≈ 0). Se **calibró a
+   0.45** (chief), que separa **~0.34 m** (subida en +perp, bajada en −perp) **sin estrangular** la
+   evacuación densa.
+
+**Calibración final.** `speed_factor = 0.38` en STAIRS.csv (con vd≈1.4 da **v efectiva medida 0.59 m/s**
+en los tramos, dentro del rango 0.5–0.6); `STAIR_WIDTH = 2.6`; `LANE_BIAS_WEIGHT = 0.45`;
+`STAIR_LANE_MIN_WIDTH = 2.5`; `laneOffset = width/4 = 0.65`.
+
+**Resultados verificados (seed=1).**
+- **149/149 tests verdes** (8 skipped) con todo integrado.
+- **Baseline** (~30 agentes): 14 suben a P1 por el switchback (z 0→1.5→3) y bajan, **0 atascados en el
+  landing**, 29/30 evacúan (el 1 restante es un rezagado lento a z=0 cerca de una salida, no del
+  landing). v_flight = 0.59 m/s.
+- **Contraflujo** (escenario dedicado `scenarios/contraflujo`, flujos balanceados subida/bajada por el
+  switchback SUR): medido en el frame exacto del CPM (offset perpendicular firmado por el flag
+  `ascending`), **subida = +0.149 m, bajada = −0.186 m, separación = +0.335 m con el signo correcto** →
+  carriles separados.
+- **Evacuación N=120** (56 agentes arrancan en P1, deben bajar el switchback): **118/120 evacúan**,
+  tiempo medio 70.2 s, máximo 153 s (sin regresión respecto de N=40 de D18; los 2 no-evacuados son
+  congestión, no atasco de escalera).
+- **Render:** vista 3D apila `[0, 1.5, 3]` y dibuja **peldaños** (tread+riser) por tramo; corre sin
+  excepción sobre el switchback de 4 tramos.
+
+**Alternativas descartadas.**
+- *Un tramo recto con carriles* (sin descanso): no cumple el elemento (1) switchback+descanso ni da la
+  vuelta en L realista.
+- *Reescribir el core para un tipo `Switchback` de primera clase*: innecesario — dos `Stairs` + landing
+  reutilizan grafo/CIM/CPM tal cual (sólo cambios de builder + un guard de grafo + carriles gateados).
+- *Landing a horcajadas de la línea de pies*: bug de conectividad (barandas tapian el cruce), ver fix 1.
+- *Confinar el plano z=1.5 con una caja cerrada al norte*: rompería la entrada/salida legítima de los
+  tramos (el agente que baja el tramo A pasa por y=7 al pie); en su lugar se confina la huella del
+  tramo A con barandas z=1.5 (fix 2).
+- *Bias de carril como target-replace duro*: pelearía con el pull al objetivo y estrangularía el flujo
+  denso; se usa una corrección perpendicular gentil, saturada, gateada por ancho.
+
+**Archivos tocados.** `core/Stairs.java`, `agent/om/CpmOperationalModel.java`,
+`environment/graph/NavigationGraph.java`, `App.java` (Java core); `tools/scenarios-builders/
+build_escuela.py` (builder); `tools/visualize_simulation_3d.py`, `tools/visualize_simulation.py` (viz).
+Escenarios de verificación: `scenarios/escuela` (baseline), `scenarios/escuela_evac` (N=120),
+`scenarios/contraflujo` (dedicado al chequeo de carriles).
+
+---
+
+## D20 — Sub-escenario Ingreso (Task 4): caudal a Nmax fijo, planes con kiosco y zona observable en el kiosco
+
+- **Fecha:** 2026-07-02
+- **Estado:** vigente
+- **Paso del plan:** Task 4 (sub-escenario Ingreso sobre el escenario Escuela)
+
+**Contexto.** El enunciado pide un sub-escenario **Ingreso**: los `Nmax=120` alumnos **llegan**
+(caudal variable) y se dirigen a sus aulas; el input del barrido es el **caudal** = los 120
+repartidos en **1 / 5 / 10 min** (Nmax FIJO, varía la ventana), el observable es **población vs.
+tiempo** en una zona y el escalar es la **ocupación máxima/promedio** vs. caudal. El builder
+`build_escuela.py` ya tenía `baseline` (D13/D15) y `evacuacion` (D18); `build_parameters(mode=
+'ingreso')` tiraba `NotImplementedError`. `sweep_run.py`/`sweep_lib.py`/`plot_evacuacion.py` (Task 2)
+son la infra reusada; se agregó `plot_ingreso.py`.
+
+**Decisión.**
+
+1. **Semántica del caudal (Nmax=120 FIJO en las 3 ventanas).** El generador CALM
+   (`ConfigurablePedestrianGenerator`) traduce el par `(period, quantity)` del JSON a un caudal
+   `p/min = quantity/period*60` (`App.effectiveFlowRatePerMin`) y su cupo por ventana es
+   `round(quantity/period * W)` (W = ventana en s). Fijando **`period = quantity * W / cupo`** se
+   obtiene el cupo EXACTO para cualquier W. Se reparten los 120 en **3 accesos dedicados**
+   (`INGRESO_ENTRADAS`): `INGRESO_RECREO` (cupo 60), `INGRESO_EDIF_SUR` (30), `INGRESO_EDIF_NORTE`
+   (30). `active_time = W`, `inactive_time = NEVER_REACTIVATE` (un solo burst).
+
+2. **Zonas de spawn DEDICADAS y anchas (no las del baseline).** El generador recorta el caudal al
+   tope de densidad de puerta `MAX_PEOPLE_PER_METER = 3 p/min/m` sobre `doorWidth = max(ancho,alto)`
+   del rectángulo de spawn. Con las 2 zonas chicas del baseline (3×6 y 3×4 ⇒ topes 18 y 12 p/min) la
+   ventana de 1 min (que necesita 120 p/min) **quedaba recortada a ~30 agentes** ⇒ el barrido salía
+   **INVERTIDO** (más caudal → MENOS agentes, observable sin sentido). Se dimensionaron las zonas
+   para que su tope supere el caudal de la ventana más corta: RECREO 10×30 (doorWidth 30 ⇒ tope 90 ≥
+   60), EDIF_SUR y EDIF_NORTE 12×7 (doorWidth 12 ⇒ tope 36 ≥ 30). Ubicación: RECREO en el recreo
+   abierto (x∈[3,13], y∈[12,42], libre del kiosco y la salida), EDIF_SUR/EDIF_NORTE en las zonas
+   abiertas de PB en las dos puntas del pasillo (x∈[48,60], y∈[0.5,7.5] y y∈[52.5,59.5]).
+   **Verificado: N efectivo = 120 en las 3 ventanas** (contando ids únicos en el output).
+
+3. **Planes con el kiosco (realista).** El kiosco está en el recreo ⇒ **sólo el que entra por el
+   recreo pasa por él** antes del aula; los dos accesos del edificio van directo. 4 planes:
+   `ING_KIOSCO_PB` / `ING_KIOSCO_P1` (KIOSCO→AULA→EXIT, pool de `INGRESO_RECREO`) y `ING_DIR_PB` /
+   `ING_DIR_P1` (AULA→EXIT, pool de los dos accesos del edificio). ~50/50 PB/P1 por acceso. Aula =
+   server `CLASSROOM` con el **timbre puesto después de `max_time`** (`_classroom_ingreso`,
+   sesión = max_time+50) para que absorba a los que llegan sin dismissal (en Ingreso interesa la
+   llegada, no la salida). `max_time = W + 250 s`. Kiosco con `max_capacity=30` y servicio corto
+   `GAUSSIAN(mean=4, std=1)`.
+
+4. **Zona observable = frente del kiosco del recreo (NO el corredor pre-escalera).** El contrato
+   proponía `(42,8,48,14)` (corredor antes de la escalera SUR), pero al medir con Nmax=120 fijo la
+   **congestión no se forma en la escalera**: el switchback (Task 3, D19) es ancho (2 carriles) y sólo
+   ~la mitad de los alumnos suben a P1 (47–58/120), repartidos entre las escaleras SUR y NORTE y a lo
+   largo de la ventana ⇒ el pie de escalera queda casi vacío (pico 2–3, sin tendencia clara). La
+   congestión real del Ingreso se forma en el **kiosco** (los ~60 alumnos del recreo se agolpan frente
+   al kiosco antes de clase — el "recreo con kiosco" del enunciado). Se fijó **`ZONA = (2,42,14,52)`**
+   (z=0) en `plot_ingreso.py`, con `--zone` para overridear (y `ZONA_ESCALERA_SUR` documentada). El
+   enunciado dice "una zona (p. ej. antes de la escalera)": el "p. ej." habilita medir donde
+   efectivamente hay congestión.
+
+**Resultado verificado (seed=1, barrido 1/5/10 min, `--mode ingreso`).**
+- **N efectivo = 120 / 120 / 120** (ids únicos en cada `output.csv`).
+- **Suben a P1 por la escalera:** 47 (1 min) / 58 (5 min) / 57 (10 min). El output muestra agentes en
+  todos los `z` del switchback (tramo A z∈[0.5,1.4], landing z≈1.5, tramo B z∈[1.6,2.6], P1 z≈3).
+- **Observable (ocupación en la zona del kiosco), pico | promedio | t_pico:**
+  - 1 min:  **pico 51 | prom 29.43 | t_pico 73.6 s**
+  - 5 min:  **pico 16 | prom  6.44 | t_pico 268.8 s**
+  - 10 min: **pico  6 | prom  1.53 | t_pico 184.6 s**
+  **Tendencia correcta: el pico y el promedio DECRECEN al alargar la ventana** (caudal más lento ⇒
+  menos aglomeración simultánea), monótona y fuerte (pico 51→16→6, ~8.5× de caída).
+- Gráficos: `out/ingreso_poblacion.png` (población vs. tiempo, una curva por caudal) y
+  `out/ingreso_scalar.png` (máx/prom vs. ventana).
+
+**Alternativas descartadas.**
+- *Reusar las 2 zonas chicas del baseline* (lo que decía el contrato B4.1): el tope de densidad de
+  puerta recorta la ventana de 1 min a 30 agentes ⇒ barrido invertido. Se necesitan zonas anchas.
+- *2 accesos en vez de 3*: ninguna zona abierta de la PB del edificio llega a doorWidth 20 (las puntas
+  del pasillo son de ~12 m; el corredor central de 6 m contaminaría el observable), así que un solo
+  acceso de edificio no alcanza el cupo 60 sin recorte. Se parte en dos accesos de 30 (SUR y NORTE),
+  que además alimentan naturalmente las dos escaleras.
+- *Modo BATCH / `instant_occupation`*: no tiene tope de densidad, pero coloca todo en t=0 ⇒ destruye
+  la semántica de "ventana de llegada" (1/5/10 min). Se mantiene CALM.
+- *Observable en el corredor antes de la escalera SUR* `(42,8,48,14)` u otras variantes de
+  corredor/escalera (norte, boca del corredor): probadas todas, señal plana o no monótona (picos 2–5)
+  porque la escalera ancha no congestiona. Se documenta como hallazgo (la escalera Task 3 absorbe bien
+  el flujo de Ingreso) y se mueve el observable al kiosco, que sí es informativo.
+- *Timbre del baseline (t=140)*: expulsaría a los alumnos de vuelta a la zona durante la ventana; en
+  Ingreso interesa la llegada, así que el timbre se corre más allá de `max_time`.
+
+**Archivos tocados.** `tools/scenarios-builders/build_escuela.py` (rama `ingreso` de
+`build_generators` + `build_parameters`, `INGRESO_ENTRADAS`/`INGRESO_ZONES`,
+`_build_parameters_ingreso`, `_classroom_ingreso`); `tools/plot_ingreso.py` (nuevo). Java sin
+cambios (no se corrió `mvn test`: Task 4 no toca Java; `mvn -q compile` OK). Salidas de verificación:
+`out/sweeps/ingreso/v{1,5,10}/seed1/output.csv`, `out/ingreso_poblacion.png`, `out/ingreso_scalar.png`.
+
+---
+
+## D21 — Fix del "salto de z" al pie de la escalera (teletransporte a mitad de tramo)
+
+- **Fecha:** 2026-07-02
+- **Estado:** vigente
+- **Paso del plan:** bug visual/físico sobre la escalera switchback (D19)
+
+**Síntoma.** Agentes que llegaban a una escalera **saltaban de `z=0` a `z≈0.55` en un solo frame**
+de salida (parecían teletransportarse a la mitad del tramo). Medido: `max |Δz|/frame ≈ 0.56` en
+baseline y `≈0.57` en ingreso, todos con el patrón `z: 0 → ~0.55` a `y≈5.5` (SUR) / `y≈56.9`
+(NORTE), es decir a mitad de la huella del tramo A.
+
+**Causa raíz (overshoot).** El tramo A SUR (pie `(43.4,7,0)`, tope/descanso `(43.4,3,1.5)`) tiene el
+**pie en el extremo LEJANO** (y=7, lado corredor) y su huella (tubo de barandas x∈[42.1,44.7],
+y∈[3,7]) está **abierta arriba y abajo** (sin peldaños que ocluyan). Como el `GridNodeReducer` ponía
+**nodos de piso a ras del suelo DENTRO del tubo**, y el nodo-pie se conectaba a un nodo al **SUR**
+(bajo el descanso) *a través* del tubo, el A* ruteaba al pie **por dentro de la huella**: los agentes
+que llegaban desde el sur (entrada) **subían el tubo a `z=0`** (su footTarget era el pie,
+`headingAcross=false` ⇒ el OM no interpola z). Al llegar a **1.5 m del pie** el grafo
+(`furthestVisibleHopOnPath`) cambiaba el hop del pie al tope; con `STAIR_FOOT_REACH=1.5` eso pasaba a
+avance ≈0.37 (tramo de 4 m, Δz=1.5), donde `zAt≈0.56`: `headingAcross` pasaba a `true`, el OM
+enganchaba `setZ(zAt)` y la z **saltaba 0 → 0.56**.
+
+**Decisión final (dos cambios chicos; NO tocan el core, el switchback D19, el builder ni la viz).**
+1. **Grafo — EXCLUIR de la grilla los nodos de piso dentro de la huella** (`GridNodeReducer`, nuevo
+   `stairsExclude`): en `buildGrid`, `free[g] = ... && !insideAnyStairFootprint(celda)` con
+   `Stairs.containsXy`. Se aplica en **todas las plantas** (la huella es el tubo de la escalera, no piso
+   caminable). `GraphBuilder.fromGeometry` pasa `geometry.stairs()` al reducer. Con esto **desaparecen
+   los nodos-basura del tubo**, el A* deja de rutear al pie por dentro y el ruteo del descanso queda
+   limpio (ver más abajo: es lo que arregla el *turnback*).
+2. **Grafo — cambiar el hop del pie al tope pegado al extremo, medido a lo largo del eje.**
+   `STAIR_FOOT_REACH` pasa de **1.5 → 0.15** y se mide como **distancia a lo largo del eje** del tramo
+   (nuevo helper `alongAxisDistFromNear`), no euclídea. Es la **misma proyección que usa `Stairs.zAt`**:
+   al cambiar el hop, `zAt(agente) ≈ zAt(extremo cercano) = z de la planta`, así que la z engancha desde
+   el nivel del piso **sin salto**. Sirve para subida (extremo cercano = pie, z=0) y bajada (extremo =
+   tope de B, z=3): en ambos `zAt(extremo)` = z actual del agente. Ignora el desvío perpendicular a
+   propósito y, si el agente se **pasa** del extremo, el helper recorta el avance a 0 (robusto al
+   overshoot). Cota del salto: `≤ 0.375·(0.15 + avance-de-1-frame) ≈ 0.10`.
+
+**El fix 2 SOLO regresaba el ruteo; hizo falta el fix 1 para arreglarlo.** Con reach chico pero **con la
+grilla vieja** (nodos dentro del tubo), aparecía un **"turnback"**: agentes que llegaban al descanso
+(z=1.5) **bajaban sin cruzar al tramo B** (tan visible como el teletransporte). Medido con reach=0.15 y
+grilla vieja: **turnback=4, P1=10** (objetivo: turnback≤1, P1≥14). La **exclusión de la huella (fix 1)**
+limpia el ruteo del descanso y **elimina el turnback**: con exclusión + reach 0.15 ⇒ **turnback=0,
+P1=15**. La exclusión es lo que da el ruteo bueno; el reach chico es lo que evita el salto de z.
+
+**Alternativas probadas y descartadas (el camino tuvo varias vueltas).**
+- *Reach chico SOLO (sin exclusión)*: arregla el salto pero **regresa el ruteo** (turnback=4, P1=10),
+  porque el A* sigue teniendo nodos dentro del tubo y el cruce del descanso queda flojo. Descartado.
+- *Reach generoso (1.5) SOLO*: enganche confiable (turnback=0) pero **reintroduce el salto** (0.56),
+  porque el cambio de hop ocurre a mitad de huella. Descartado.
+- *Ocluir la huella en la visibilidad de piso* (reducer `seesOver` + `NavigationGraph.isVisible` +
+  `connectToFloor`, con `Stairs.crossesFootprint`): intentaba que el pie se conectara por la boca/norte.
+  En la planta baja lo lograba (pie→vestíbulo), pero **rompía el cruce del DESCANSO** (z=1.5): al ocluir
+  ahí, los descansos SUR y NORTE quedaban desconectados y el cruce tramo A→B se caía (**P1 2/30**).
+  Gatearlo sólo a la planta baja tampoco creaba el nodo del vestíbulo en esta geometría (el pie seguía
+  conectándose al sur). **Toda la maquinaria de oclusión se quitó** (dead code) al ver que la simple
+  exclusión + reach chico cumple todo.
+- *Escalar el escape de contacto por `speedFactor`* / *rate-limiter de z por paso en el OM*: se probaron
+  para un salto residual `~0.14` de un empujón sobre el tramo. Con la solución final (exclusión + reach)
+  ese salto ya no aparece (Δz ingreso ≤ 0.11), así que **ambos se descartaron**: el rate-limiter además
+  desincronizaba la z de la clasificación por planta (`isOnFloor`) y bajaba P1/evac. El `setZ(zAt)` y el
+  escape quedan **exactos, idénticos al original**.
+- *Amurallar la huella a `z=0`*: descartado por diseño — el anti-tunneling de un agente SOBRE el tramo
+  usa `stairWalls` = unión de las dos plantas (D19), así que una pared z=0 en la huella bloquearía al que
+  sube (chequeo planar).
+
+**Resultados verificados (seed=1).**
+- **149/149 tests verdes** (8 skipped), incl. `GraphMultiFloorTest` y `CpmOperationalModelStairTest`.
+- `max |Δz|/frame`: **baseline 0.56 → 0.081**; **ingreso 0.57 → 0.087 (v5)**, 0.11 (v1, ventana densa),
+  0.095 (v10). **0 frames > 0.12**.
+- **Ruteo igualado/mejorado** vs. el switchback previo (P1≈14 / turnback 0 / evac≈29): baseline **P1=15,
+  turnback=0, evac=28**, 15 llegan al descanso; ingreso **P1=57 (v5/v10), 42 (v1)**. El switchback se
+  recorre completo.
+- Observable de ingreso **intacto**: kiosco pico **51 / 16 / 6** para ventanas de 1 / 5 / 10 min
+  (`sweep_lib.zone_population(f, 2,42,14,52, zlevel=0.0)`).
+
+**Archivos tocados (mínimos).** `environment/graph/GridNodeReducer.java` (campo `stairsExclude` +
+`insideAnyStairFootprint` + exclusión en `buildGrid`; overload de `reduce`); `environment/graph/
+GraphBuilder.java` (pasa `geometry.stairs()` al reducer); `environment/graph/NavigationGraph.java`
+(`STAIR_FOOT_REACH` 1.5→0.15 a-lo-largo-del-eje + helper `alongAxisDistFromNear`); `agent/om/
+CpmOperationalModel.java` (sólo doc del `setZ`; física idéntica). Sin cambios de `core`, builder ni viz.

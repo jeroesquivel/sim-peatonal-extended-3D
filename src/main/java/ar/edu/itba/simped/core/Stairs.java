@@ -108,4 +108,40 @@ public record Stairs(String blockName, Vec3 foot, Vec3 top, double width, double
         double cx = ax + t * dx, cy = ay + t * dy;
         return Math.hypot(px - cx, py - cy) <= width / 2.0;
     }
+
+    // --- Carriles subida/bajada (D19, contraflujo): métodos derivados de
+    // foot/top/width, sin agregar campos al record (no rompe los call-sites
+    // existentes que instancian Stairs con 4 o 5 args). ---
+
+    /** Versor unitario del eje planar, en el sentido pie → tope. */
+    public Vec2 axisDirXy() {
+        return top.xy().sub(foot.xy()).normalized();
+    }
+
+    /** Versor perpendicular al eje en el plano (rota {@link #axisDirXy()} 90°). */
+    public Vec2 perpXy() {
+        Vec2 dir = axisDirXy();
+        return new Vec2(-dir.y(), dir.x());
+    }
+
+    /** Offset lateral del centro de cada carril respecto al eje: medio de media-huella. */
+    public double laneOffset() {
+        return width / 4.0;
+    }
+
+    /**
+     * Centro del carril de subida/bajada a la altura del avance planar de
+     * {@code (px,py)}: proyecta sobre el eje ({@link #progressAt}), toma el punto
+     * del eje a ese progreso (con {@code z} interpolada, {@link #pointAt}) y lo
+     * desplaza perpendicularmente {@code +laneOffset()} si {@code ascending},
+     * {@code -laneOffset()} si no. Es el punto hacia el que el CPM aplica el
+     * bias lateral gentil en tramos anchos (paso 6 / D19).
+     */
+    public Vec3 laneTargetAt(double px, double py, boolean ascending) {
+        double t = progressAt(px, py);
+        Vec3 axisPoint = pointAt(t);
+        double sign = ascending ? 1.0 : -1.0;
+        Vec2 lanePos = axisPoint.xy().add(perpXy().scale(sign * laneOffset()));
+        return lanePos.withZ(axisPoint.z());
+    }
 }

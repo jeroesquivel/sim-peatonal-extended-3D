@@ -69,7 +69,13 @@ public final class GraphBuilder {
                 continue;
             }
             List<ServerRect> servers = serverRectsOn(geometry, z);
-            GridNodeReducer.Result r = GridNodeReducer.reduce(floorWalls, servers, gridSpacing);
+            // D21: se EXCLUYEN de la grilla los nodos de piso dentro de la huella de
+            // cualquier escalera (en todas las plantas: la huella no es piso caminable,
+            // es el tubo de la escalera). Así se quitan los nodos-basura del tubo, el
+            // ruteo queda limpio y —junto con un STAIR_FOOT_REACH chico— el agente
+            // entra al tramo por el pie con avance ≈0 (la z arranca en ~0, sin salto).
+            GridNodeReducer.Result r =
+                    GridNodeReducer.reduce(floorWalls, servers, geometry.stairs(), gridSpacing);
 
             int base = nodes.size();
             for (Vec2 n : r.nodes()) {

@@ -1,0 +1,407 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-noshorthands]{babel}
+\usepackage{lmodern}
+\usepackage[a4paper,margin=2.4cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}
+
+\captionsetup{font=small,labelfont=bf,skip=6pt}
+\graphicspath{{figuras/}}
+
+\definecolor{codebg}{gray}{0.96}
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color{codebg},
+  breaklines=true,
+  frame=none,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  aboveskip=8pt,
+  belowskip=8pt,
+}
+
+\title{\vspace{-1.2cm}\textbf{Ampliación a 3D de un simulador peatonal:\\ multiplanta y escaleras}}
+\author{Simulación de Sistemas --- ITBA}
+\date{Julio de 2026}
+
+\begin{document}
+\maketitle
+\vspace{-0.6cm}
+
+\begin{center}
+\small
+Escenario de estudio: \textbf{Escuela} (2 plantas, aulas, pasillos, escaleras, recreo con kiosco).\\
+Modelo físico: \textbf{Contractile Particle Model (CPM)} --- \emph{Anisotropic CPM with Avoidance},
+Baglietto--Parisi / Martin--Parisi.
+\end{center}
+
+\section{Objetivo}
+
+El simulador de partida modelaba peatones en \textbf{2D}: la posición y la velocidad eran un tipo
+\texttt{Vec2}~$(x,y)$ usado en cascada por todos los módulos (física, geometría, grafo de navegación,
+detección de vecinos). El objetivo del TP fue \textbf{ampliarlo a 3D}: soportar mapas con
+\textbf{más de una planta} conectadas por \textbf{escaleras}, y estudiar dos sub-escenarios sobre un
+mapa de escuela ---\,\textbf{Evacuación} e \textbf{Ingreso}\,--- variando un input y midiendo un
+observable.
+
+El hilo conductor de la ampliación es la coordenada $z$ (la \emph{planta}, y la altura intermedia
+mientras se recorre una escalera) y que \textbf{vecindad, física, grafo y salida} la respeten. Las
+escaleras son el elemento nuevo que conecta plantas.
+
+\section{El modelo 3D (resumen técnico)}
+
+La ampliación se resolvió con un enfoque \textbf{híbrido}: se introdujo un \texttt{Vec3}~$(x,y,z)$
+para las posiciones/velocidades, pero se \textbf{conservó \texttt{Vec2}} como tipo planar de toda la
+dinámica horizontal (la física peatonal ocurre en el plano de cada planta; la $z$ cambia sólo en la
+escalera). Las decisiones de diseño están registradas en \texttt{DECISIONES.md} (D1--D21); acá se
+resumen las centrales.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}p{3.0cm}p{9.5cm}c@{}}
+\toprule
+\textbf{Módulo} & \textbf{Qué cambió en 3D} & \textbf{Dec.} \\
+\midrule
+Tipos base & \texttt{Vec3} para posición/velocidad; \texttt{AgentState.z}. La $z$ no es grado de
+libertad dinámico: se \textbf{interpola} por el avance sobre la escalera (no hay $v_z$). & D1, D2 \\
+\addlinespace
+Geometría & Cada pared/salida/aula/generador/server lleva su \textbf{planta} $z$. Nuevo tipo
+\texttt{Stairs} en \texttt{STAIRS.csv}. Consultas por planta. & D3--D5 \\
+\addlinespace
+Grafo de navegación & Una malla \textbf{por planta} unida por \textbf{aristas de escalera} (pie
+$\leftrightarrow$ tope). A* con heurística \textbf{euclídea 3D}; visibilidad y \emph{Furthest
+Visible Point} por planta. & D6 \\
+\addlinespace
+Vecinos (CIM) & \textbf{Una grilla por planta} $+$ un índice ``puente'' por escalera: vecindad
+independiente por planta salvo sobre las escaleras. Paredes y vértices se detectan como vecinos. & D8 \\
+\addlinespace
+Física (CPM) & Dinámica planar en la planta del agente. Sobre la escalera: \textbf{velocidad
+reducida} e \textbf{interpolación de $z$}; anti-tunneling con las paredes de la planta actual. & D9 \\
+\addlinespace
+Salida & Se agrega la columna $z$: \texttt{tout; x; y; z; vx; vy; state; id}. & D10 \\
+\addlinespace
+Animación & Cada planta en \textbf{2D} (círculos) $+$ una \textbf{vista 3D a 45\textdegree} con las
+plantas apiladas. & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Se mantuvo \textbf{CPM como único modelo} (se eliminó el SFM, D7). La suite de tests quedó en
+\textbf{149 verdes}.
+
+\section{La escalera realista (switchback con descanso)}
+
+La primera versión de la escalera era un \textbf{único tramo recto}. Se rediseñó para que fuera
+físicamente creíble (D19):
+
+\begin{itemize}
+  \item \textbf{Switchback con descanso.} Cada escalera es un tramo en \textbf{L}: dos \emph{flights}
+  paralelos (A y B) unidos por un \textbf{piso de descanso} a media altura ($z = 1.5$~m). El agente
+  sube el tramo A, gira en el descanso, y sube el tramo B hacia la planta siguiente. Se modeló como
+  \textbf{dos \texttt{Stairs} encadenados a través del landing} (un ``piso'' chico a $z=1.5$),
+  reutilizando toda la maquinaria multiplanta sin reescribir el núcleo.
+  \item \textbf{Confinamiento.} Barandas laterales en cada tramo y perímetro del landing (con huecos
+  en las bocas) mantienen al agente dentro de la huella.
+  \item \textbf{Carriles de subida/bajada (contraflujo).} Sobre tramos anchos el CPM aplica un
+  \emph{bias} lateral suave según la dirección de viaje, calibrado para no estrangular el flujo denso
+  unidireccional.
+  \item \textbf{Peldaños en la vista 3D.} La escalera se dibuja como un perfil de escalones (huella
+  $+$ alzada) en lugar de una línea inclinada.
+  \item \textbf{Velocidad calibrada.} \texttt{speed\_factor} $= 0.38$ sobre $v_d \approx 1.55$~m/s da
+  una velocidad efectiva medida de $\approx 0.59$~m/s en la escalera, con $z$ monótona respecto del
+  avance.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.78\textwidth]{escuela_3d.png}
+\caption{Vista 3D apilada de la Escuela ($t=120$~s). Se ven las tres capas ---\,PB ($z=0$), descanso
+($z=1.5$) y P1 ($z=3$)\,--- y las dos escaleras \emph{switchback} (peldaños en naranja), con agentes
+distribuidos en las tres.}
+\end{figure}
+
+\paragraph{Corrección de un artefacto (D21).} Al inspeccionar la animación se detectó que algunos
+agentes que llegaban a la escalera \textbf{saltaban de $z=0$ a $z\approx0.56$ en un solo cuadro}
+(``se teletransportaban'' a media escalera). El diagnóstico mostró que no era del render sino del
+ruteo: los agentes que se acercaban al pie por dentro de la huella recién enganchaban la $z$ a mitad
+del tramo. Se resolvió (a) \textbf{excluyendo de la grilla del grafo los nodos dentro de la huella de
+las escaleras}, de modo que el agente entra por el pie con avance $\approx 0$, y (b) ajustando el
+punto en que el ruteo lo compromete a subir. El salto máximo por cuadro bajó de
+\textbf{$0.56$~m a $0.08$~m} (imperceptible), sin regresar el ruteo multiplanta, verificado sobre el
+baseline y los sub-escenarios.
+
+\section{El escenario Escuela}
+
+Mapa cuadrado de \textbf{$60\times60$~m} con dos zonas:
+
+\begin{itemize}
+  \item \textbf{Recreo} (izquierda, $x\in[0,30]$, una sola planta $z=0$): patio abierto con un
+  \textbf{kiosco} (server con cola) y una salida propia.
+  \item \textbf{Edificio} (derecha, $x\in[30,60]$, dos plantas: \textbf{PB} $z=0$ y \textbf{P1}
+  $z=3$): un pasillo vertical central separa \textbf{16 aulas} (4 por lado y por planta).
+  \textbf{Dos escaleras switchback} en las puntas conectan PB$\leftrightarrow$P1. La PB tiene salida
+  propia y se comunica con el recreo por las esquinas; la P1 no tiene salida, se evacúa
+  \textbf{bajando} por las escaleras.
+\end{itemize}
+
+Las \textbf{aulas son servers \texttt{CLASSROOM}} (recinto colectivo con una sesión de clase) y los
+planes se diferencian por planta para repartir la población sin sesgo (D15, D16).
+
+\section{Metodología: barridos reproducibles}
+
+El enunciado pide ``scripts para ejecutar variando el input y generar los gráficos''. Se construyó
+una infraestructura de barrido reproducible:
+
+\begin{itemize}
+  \item \textbf{Semilla} (\texttt{-Dsimped.seed}): se expuso una semilla determinista por stream (los
+  módulos usaban \texttt{new Random()} sin sembrar, así que las réplicas no eran comparables).
+  \item \textbf{\texttt{tools/sweep\_run.py}}: compila una vez, genera un escenario por valor del
+  input y corre la grilla (input $\times$ semillas), guardando cada \texttt{output.csv}.
+  \item \textbf{\texttt{tools/sweep\_lib.py}}: carga y agrega métricas desde el \texttt{output.csv}
+  (trayectorias por agente, población por frame en una zona, tiempos de evacuación).
+  \item \textbf{\texttt{plot\_evacuacion.py}} y \textbf{\texttt{plot\_ingreso.py}}: generan las
+  figuras de los observables.
+\end{itemize}
+
+Todos los resultados son con \textbf{semilla 1} y modelo \textbf{CPM}.
+
+\section{Sub-escenario Evacuación}
+
+\textbf{Planteo.} Los alumnos arrancan \textbf{dentro de las aulas} (ambas plantas) y evacúan a las
+salidas; los de P1 bajan por las escaleras. \textbf{Input:} capacidad total $N$ (barrido
+$N\in\{40,80,120\}$). \textbf{Observable primario:} distribución de tiempos de evacuación
+$t_{\text{evac}} = t_{\text{salida}} - t_{\text{inicio}}$ por agente. \textbf{Observable escalar:}
+$t_{\text{evac}}$ promedio y máximo vs $N$.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{evac_hist.png}
+\caption{Distribución de tiempos de evacuación para $N=40$, $80$ y $120$.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.62\textwidth]{evac_scalar.png}
+\caption{Tiempo de evacuación promedio y máximo en función de la capacidad $N$.}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}rrrr@{}}
+\toprule
+$N$ & agentes evacuados & $t_{\text{evac}}$ promedio [s] & $t_{\text{evac}}$ máximo [s] \\
+\midrule
+40  & 38  & 65.1 & 120.0 \\
+80  & 78  & 76.1 & 164.6 \\
+120 & 118 & 79.4 & 177.6 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Lectura.} El tiempo de evacuación crece con $N$ (más agentes $\Rightarrow$ más congestión en
+pasillos y escaleras): el promedio pasa de $\sim$65~s a $\sim$79~s y el máximo de 120~s a 178~s al
+triplicar la capacidad. La distribución se ensancha y desarrolla una cola larga a mayor $N$ (los
+últimos en salir, típicamente los de P1 que bajan la escalera, tardan cada vez más). Estos tiempos
+incorporan la escalera switchback (más larga y a velocidad reducida que un tramo recto).
+
+\section{Sub-escenario Ingreso}
+
+\textbf{Planteo.} Los $N_{\max}=120$ alumnos \textbf{llegan} por las entradas y se dirigen a sus
+aulas; los que entran por el recreo pasan antes por el \textbf{kiosco}. \textbf{Input:} el
+\textbf{caudal}, es decir los 120 distribuidos en una ventana de llegada de \textbf{1, 5 o 10
+minutos} ($N_{\max}$ fijo). \textbf{Observable primario:} población vs tiempo en una \textbf{zona de
+interés}. \textbf{Observable escalar:} ocupación máxima y promedio en esa zona vs caudal.
+
+\textbf{Elección de la zona.} El enunciado sugiere ``una zona, p.\,ej. antes de la escalera''. Se
+probó esa zona (el pie de la escalera principal) y \textbf{no muestra congestión}: la escalera
+switchback es ancha (dos carriles) y sólo la mitad de los alumnos suben a P1, repartidos entre las
+dos escaleras y a lo largo de toda la ventana, de modo que el pie queda casi vacío. La congestión
+real del Ingreso se forma en la \textbf{cola del kiosco} (los $\sim$60 alumnos del recreo se agolpan
+antes de clase), que da una señal fuerte y monótona. Se adoptó esa zona como observable (el
+``p.\,ej.'' del enunciado lo habilita).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{ingreso_poblacion.png}
+\caption{Población dentro de la zona de congestión (frente del kiosco) vs tiempo, para caudales de 1,
+5 y 10 minutos.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.62\textwidth]{ingreso_scalar.png}
+\caption{Ocupación máxima y promedio en la zona en función de la ventana de llegada (caudal).}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}llrr@{}}
+\toprule
+Ventana de llegada & Caudal & Ocupación pico & Ocupación promedio \\
+\midrule
+1 min  & alto  & 51 & 29.4 \\
+5 min  & medio & 16 & 6.4 \\
+10 min & bajo  & 6  & 1.5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Lectura.} Con $N_{\max}$ fijo, \textbf{cuanto más corto el caudal, mayor la congestión}:
+concentrar 120 alumnos en 1~minuto produce un pico de 51 agentes en la zona, mientras que
+repartirlos en 10~minutos lo baja a 6 (una reducción de $\sim$8.5$\times$). La curva de población
+muestra el pico agudo y temprano del caudal de 1~minuto frente a la meseta baja y extendida del de
+10~minutos --- el mismo total de personas, distinta intensidad de aglomeración.
+
+\subsection{Estudio complementario: variar la cantidad de agentes}
+
+Sobre el mismo sub-escenario se agregó un eje ortogonal ---\,variar $N_{\max}$ a ventana fija
+(5~min)\,--- con \texttt{tools/run\_ingreso\_nmax.py}, para ver cómo escala la congestión con la
+cantidad de gente.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{ingreso_nmax_poblacion.png}
+\caption{Población en la zona vs tiempo para $N_{\max}=60$, $120$ y $180$ (ventana de 5~min).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.62\textwidth]{ingreso_nmax_scalar.png}
+\caption{Ocupación máxima y promedio en la zona en función de $N_{\max}$.}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}rrr@{}}
+\toprule
+$N_{\max}$ & Ocupación pico & Ocupación promedio \\
+\midrule
+60  & 6  & 1.3  \\
+120 & 16 & 6.5  \\
+180 & 49 & 28.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+La ocupación crece de forma marcadamente \textbf{supralineal} con $N_{\max}$ (el pico se multiplica
+por $\sim$8 al triplicar la población): la zona no absorbe el flujo proporcionalmente, sino que se
+satura.
+
+\section{Mapas de calor (observable complementario)}
+
+Como extra opcional del enunciado se agregaron mapas de calor por planta
+(\texttt{tools/heatmaps.py}), con \textbf{colormaps secuenciales de un solo hue}
+(claro$\to$oscuro) y las paredes superpuestas; las celdas nunca ocupadas quedan en gris.
+
+\paragraph{Densidad de ocupación.} Para cada celda de una grilla de $1\times1$~m se cuenta la
+ocupación media (agentes dentro de la celda promediados sobre todos los cuadros del \texttt{output}).
+En la \textbf{evacuación} (Figura~\ref{fig:dens-evac}) los puntos calientes son el \textbf{pasillo central} y los
+\textbf{pies de las escaleras} ---por donde todos convergen para bajar--- más las dos rutas hacia las
+salidas. En el \textbf{ingreso} (Figura~\ref{fig:dens-ing}) el punto caliente es la \textbf{cola del kiosco} (el pico
+de congestión que ya mostraba el observable del sub-escenario), con los pasillos y entradas mucho más
+tenues.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{heatmap_densidad_evac.png}
+\caption{Densidad de ocupación durante la evacuación ($N=120$): el pasillo central y las escaleras
+concentran el flujo.}
+\label{fig:dens-evac}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{heatmap_densidad_ingreso.png}
+\caption{Densidad de ocupación durante el ingreso (caudal de 1~min): la cola del kiosco es el punto
+caliente.}
+\label{fig:dens-ing}
+\end{figure}
+
+\paragraph{Tiempos de evacuación por origen.} Se toma el punto de \textbf{origen} de cada agente (su
+primer cuadro) y se colorea la celda con el \textbf{tiempo de evacuación medio} de los agentes que
+arrancan ahí (Figura~\ref{fig:tevac}). El resultado es nítido: las aulas de \textbf{PB} evacúan en $\sim$40--60~s
+(naranja claro), mientras que las de \textbf{P1} tardan $\sim$120--170~s (rojo oscuro), porque deben
+\textbf{bajar la escalera}. El mapa cuantifica espacialmente el costo de estar en la planta alta.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{heatmap_tevac.png}
+\caption{Tiempo de evacuación medio según la celda de origen ($N=120$). Las aulas de P1 (rojo oscuro)
+evacúan mucho más lento que las de PB por tener que descender por las escaleras.}
+\label{fig:tevac}
+\end{figure}
+
+\section{Verificación y calidad}
+
+\begin{itemize}
+  \item \textbf{Suite de tests: 149 verdes} (8 \emph{skipped}), incluidos los de la física de
+  escaleras (\texttt{CpmOperationalModelStairTest}), del grafo multiplanta
+  (\texttt{GraphMultiFloorTest}) y del CIM por planta.
+  \item \textbf{Baseline ``día escolar''} (ingreso $\to$ clase $\to$ evacuación) validado: de
+  $\sim$30 alumnos, $\sim$15 suben a P1 por las escaleras y bajan, \textbf{0 quedan atascados} en el
+  descanso, y $\sim$28/30 evacúan.
+  \item Cada resultado fue \textbf{medido directamente sobre el \texttt{output.csv}} de una corrida
+  con semilla fija, no asumido.
+\end{itemize}
+
+\section{Conclusiones}
+
+\begin{itemize}
+  \item El simulador quedó \textbf{ampliado a 3D} de punta a punta: agentes con $z\neq0$ que recorren
+  escaleras a velocidad reducida, detección de vecinos y física por planta, grafo de navegación 3D
+  (A* euclídeo con unión por escaleras), salida con $z$ y animación 2D-por-planta $+$ 3D apilada.
+  \item La \textbf{escalera switchback} con descanso, confinamiento, carriles de contraflujo y
+  peldaños da un comportamiento físicamente creíble; el artefacto del salto de $z$ se diagnosticó y
+  resolvió.
+  \item Los dos sub-escenarios producen observables con \textbf{sentido físico claro}: la evacuación
+  se alarga con la capacidad, y la congestión de ingreso crece al concentrar el caudal (y al aumentar
+  $N_{\max}$).
+  \item Todas las decisiones de arquitectura quedaron registradas en \texttt{DECISIONES.md}
+  (D1--D21).
+\end{itemize}
+
+\appendix
+\section{Reproducción de los resultados}
+
+\begin{lstlisting}[language=bash]
+# Compilar y tests
+mvn clean test                      # 149 verdes
+
+# Escenario Escuela (baseline) + animacion 3D
+python tools/scenarios-builders/build_escuela.py
+mvn -q dependency:build-classpath -Dmdep.outputFile=out/.cp.txt
+java -Dsimped.seed=1 -cp "target/classes:$(cat out/.cp.txt)" \
+     ar.edu.itba.simped.App scenarios/escuela out/escuela.csv cpm
+python tools/visualize_simulation_3d.py --scenario scenarios/escuela \
+     --output out/escuela.csv --out out/escuela_3d.mp4 --stride 3
+
+# Evacuacion: barrido N en {40, 80, 120} + figuras
+python tools/sweep_run.py --mode evacuacion --values 40,80,120 --seeds 1 --om cpm
+python tools/plot_evacuacion.py --sweep-dir out/sweeps/evacuacion --seed 1 --out-prefix out/evac
+
+# Ingreso: barrido caudal 1/5/10 min + figuras
+python tools/sweep_run.py --mode ingreso --values 1,5,10 --seeds 1 --om cpm
+python tools/plot_ingreso.py --sweep-dir out/sweeps/ingreso --seed 1 --out-prefix out/ingreso
+
+# Ingreso variando la cantidad de agentes (estudio complementario)
+python tools/run_ingreso_nmax.py --nmax 60,120,180 --window 5 --seed 1
+\end{lstlisting}
+
+\end{document}

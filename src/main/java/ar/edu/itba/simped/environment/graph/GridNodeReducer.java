@@ -64,6 +64,14 @@ final class GridNodeReducer {
 
     private final List<Wall> walls;
     private final List<GraphBuilder.ServerRect> servers;
+    /**
+     * Huellas de escalera cuyos nodos de piso se EXCLUYEN (D21): no se colocan nodos
+     * de piso a ras del suelo dentro del tubo de una escalera (ahí "se está en la
+     * escalera", no en el piso). Quita los nodos-basura del tubo y limpia el ruteo,
+     * que era la causa del atasco en el descanso (turnback). Se aplica en todas las
+     * plantas (la huella no es piso caminable en ninguna).
+     */
+    private final List<ar.edu.itba.simped.core.Stairs> stairsExclude;
     private final double spacing;
 
     private final double minX, minY;
@@ -79,9 +87,11 @@ final class GridNodeReducer {
 
     private final double[] wMinX, wMinY, wMaxX, wMaxY; // bounding box por pared
 
-    private GridNodeReducer(List<Wall> walls, List<GraphBuilder.ServerRect> servers, double spacing) {
+    private GridNodeReducer(List<Wall> walls, List<GraphBuilder.ServerRect> servers,
+                            List<ar.edu.itba.simped.core.Stairs> stairsExclude, double spacing) {
         this.walls = walls;
         this.servers = servers;
+        this.stairsExclude = stairsExclude;
         this.spacing = spacing;
 
         double bMinX = Double.MAX_VALUE, bMinY = Double.MAX_VALUE;
@@ -116,7 +126,12 @@ final class GridNodeReducer {
     record Result(List<Vec2> nodes, List<Map<Integer, Double>> adjacency, List<Integer> types) {}
 
     static Result reduce(List<Wall> walls, List<GraphBuilder.ServerRect> servers, double spacing) {
-        return new GridNodeReducer(walls, servers, spacing).run();
+        return reduce(walls, servers, List.of(), spacing);
+    }
+
+    static Result reduce(List<Wall> walls, List<GraphBuilder.ServerRect> servers,
+                         List<ar.edu.itba.simped.core.Stairs> stairsExclude, double spacing) {
+        return new GridNodeReducer(walls, servers, stairsExclude, spacing).run();
     }
 
     // ------------------------------------------------------------------
@@ -181,7 +196,8 @@ final class GridNodeReducer {
                 clearance[g] = Math.min(dWall, dServer);
                 // El espacio personal también aplica a los servidores: ningún nodo a menos de
                 // PERSONAL_SPACE de un servidor (además del margen de pared para caminar).
-                free[g] = dWall >= WALL_CLEARANCE && dServer >= PERSONAL_SPACE;
+                free[g] = dWall >= WALL_CLEARANCE && dServer >= PERSONAL_SPACE
+                        && !insideAnyStairFootprint(c);
             }
         }
     }
@@ -219,6 +235,20 @@ final class GridNodeReducer {
         for (int g = 0; g < nx * ny; g++) {
             if (free[g] && comp[g] != bestId) free[g] = false;
         }
+    }
+
+    /**
+     * ¿El punto cae dentro de la huella de alguna escalera? (D21) Los nodos de piso
+     * a ras del suelo dentro de una huella no tienen sentido; excluyéndolos, el A*
+     * rutea al pie/tope por AFUERA de la huella (boca) y el agente entra con avance
+     * ≈0 (z sin salto). Aplica en TODAS las plantas (una huella no es piso caminable
+     * en ninguna: es el tubo de la escalera).
+     */
+    private boolean insideAnyStairFootprint(Vec2 p) {
+        for (ar.edu.itba.simped.core.Stairs s : stairsExclude) {
+            if (s.containsXy(p.x(), p.y())) return true;
+        }
+        return false;
     }
 
     /** Distancia (≥0) de un punto al rectángulo de servidor más cercano; 0 si está dentro. */
@@ -909,7 +939,7 @@ final class GridNodeReducer {
     public static void main(String[] args) {
         List<Wall> walls = GraphBuilder.parseWallsCsv("scenarios/example/WALLS.csv");
         List<GraphBuilder.ServerRect> servers = GraphBuilder.parseServersCsv("scenarios/example/SERVERS.csv");
-        GridNodeReducer r = new GridNodeReducer(walls, servers, 0.20);
+        GridNodeReducer r = new GridNodeReducer(walls, servers, List.of(), 0.20);
         Result res = r.run();
 
         List<Integer> cells = new ArrayList<>();

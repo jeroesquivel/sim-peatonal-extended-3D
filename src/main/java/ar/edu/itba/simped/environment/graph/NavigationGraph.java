@@ -44,8 +44,24 @@ final class NavigationGraph {
     /** Niveles de planta distintos presentes en los nodos (claves redondeadas). */
     private final java.util.Set<Long> floorKeys;
 
-    /** Cuán cerca (planar) del pie de la escalera el agente empieza a subir hacia el tope. */
-    private static final double STAIR_FOOT_REACH = 1.5;
+    /**
+     * Cuán cerca del extremo cercano de la escalera (el pie al subir, el tope al
+     * bajar) el agente cambia el hop hacia el otro extremo para empezar a recorrer
+     * el tramo. Se mide <b>a lo largo del eje</b> del tramo (no distancia euclídea):
+     * es la misma proyección que usa {@link ar.edu.itba.simped.core.Stairs#zAt}, así
+     * que cuando el hop cambia, {@code zAt(agente) ≈ zAt(extremo) = z de la planta} y
+     * la {@code z} engancha desde el nivel del piso <b>sin salto</b>.
+     *
+     * <p><b>Bug del salto de z (D21).</b> Con el valor viejo (1.5, medido como
+     * distancia euclídea al pie) el cambio de hop ocurría a mitad de la huella
+     * (avance ≈ 0.37 sobre un tramo de 4 m con Δz=1.5), donde {@code zAt ≈ 0.56}: al
+     * enganchar la {@code z} el agente <b>saltaba de 0 a ~0.56 en un frame</b>. Con
+     * 0.15 a-lo-largo-del-eje el cambio de hop ocurre pegado al pie (avance ≈0), donde
+     * {@code zAt ≈ 0}, así la z arranca en ~0. Funciona junto con la <b>exclusión de
+     * las huellas de la grilla</b> ({@code GridNodeReducer}), que limpia los nodos del
+     * tubo y evita el atasco en el descanso (turnback) que este reach chico causaba
+     * antes con la grilla vieja. */
+    private static final double STAIR_FOOT_REACH = 0.15;
     /** Tolerancia planar para considerar que el agente está sobre el eje de una escalera. */
     private static final double STAIR_AXIS_TOL = 3.0;
 
@@ -234,7 +250,14 @@ final class NavigationGraph {
             // el hop pasa al tope para que el agente suba el tramo (la z la interpola
             // el OM al estar sobre la escalera, paso 6).
             if (!sameFloor(cur.z(), nxt.z())) {
-                if (agent.xy().distanceTo(cur.xy()) <= STAIR_FOOT_REACH) {
+                // Cambiar el hop al otro extremo SÓLO cuando el agente llegó al
+                // extremo cercano (cur) MEDIDO A LO LARGO DEL EJE del tramo — no la
+                // distancia euclídea. Es la misma proyección que usa Stairs.zAt, así
+                // que al cambiar el hop zAt(agente) ≈ zAt(cur) = z de su planta y la
+                // z engancha desde el nivel del piso, sin el salto 0→0.56 (D21). El
+                // desvío perpendicular se ignora a propósito: el agente puede llegar
+                // al extremo con offset lateral y aun así enganchar suave.
+                if (alongAxisDistFromNear(agent.xy(), cur.xy(), nxt.xy()) <= STAIR_FOOT_REACH) {
                     return new FvpOnPath(nxt, i + 1, i + 1);
                 }
                 return new FvpOnPath(cur, i, i);
@@ -266,12 +289,42 @@ final class NavigationGraph {
             if (distanceToSegmentXy(agent.xy(), a.xy(), b.xy()) > STAIR_AXIS_TOL) {
                 continue;
             }
+            // Guard multi-tramo (D19, switchback): con dos tramos del mismo
+            // switchback cercanos entre sí (p.ej. piso0↔landing y landing↔piso1),
+            // la sola distancia planar al eje no alcanza para distinguirlos si sus
+            // huellas quedan próximas. Exigir además que la z del agente caiga
+            // dentro del rango [min,max] de ESTA arista (± FLOOR_EPS) para no
+            // matchear el tramo equivocado. Con un solo tramo no cambia nada: el
+            // agente siempre está dentro del rango de su único tramo.
+            double zlo = Math.min(a.z(), b.z());
+            double zhi = Math.max(a.z(), b.z());
+            if (agent.z() < zlo - FLOOR_EPS || agent.z() > zhi + FLOOR_EPS) {
+                continue;
+            }
             Vec3 lower = a.z() <= b.z() ? a : b;
             Vec3 upper = a.z() <= b.z() ? b : a;
             // Subir si el target está por encima del agente; bajar si está por debajo.
             return target.z() >= agent.z() ? upper : lower;
         }
         return null;
+    }
+
+    /**
+     * Distancia de {@code p} al extremo {@code near} <b>medida a lo largo del eje</b>
+     * {@code near→far} (proyección sobre el eje, recortada a ≥0). Ignora el desvío
+     * perpendicular. Es la magnitud que gobierna {@link ar.edu.itba.simped.core.Stairs#zAt}
+     * (que también proyecta sobre el eje): mientras esta distancia sea chica, la z
+     * interpolada del tramo está cerca del nivel del extremo cercano. Si {@code p}
+     * se pasó del extremo cercano hacia afuera (proyección negativa) devuelve 0
+     * (enganche suave, ver D21).
+     */
+    private static double alongAxisDistFromNear(Vec2 p, Vec2 near, Vec2 far) {
+        double dx = far.x() - near.x(), dy = far.y() - near.y();
+        double len2 = dx * dx + dy * dy;
+        if (len2 < 1e-12) return p.distanceTo(near);
+        double t = ((p.x() - near.x()) * dx + (p.y() - near.y()) * dy) / len2;
+        if (t < 0.0) t = 0.0; // se pasó del extremo cercano hacia afuera del tramo
+        return t * Math.sqrt(len2);
     }
 
     private static double distanceToSegmentXy(Vec2 p, Vec2 a, Vec2 b) {

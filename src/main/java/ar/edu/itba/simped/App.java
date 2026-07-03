@@ -60,8 +60,8 @@ import java.util.function.Supplier;
  * <ul>
  *   <li>{@code scenarioDir} — directorio del escenario (default {@code scenarios/example}).</li>
  *   <li>{@code outputFile} — archivo CSV de salida (default {@code out/output.csv}).</li>
- *   <li>{@code om} — modelo de movimiento: {@code sfm} (G4, default) o {@code cpm} (G7).
- *       También se puede pasar por env var {@code SIMPED_OM}.</li>
+ *   <li>{@code om} — modelo de movimiento: siempre {@code cpm} (el SFM fue eliminado, D7;
+ *       el argumento se conserva por compatibilidad de CLI). También vía {@code SIMPED_OM}.</li>
  * </ul>
  * </p>
  */
@@ -107,8 +107,11 @@ public final class App {
         // compatibilidad de CLI pero cualquier valor resuelve a CPM.
         // OM multiplanta (D9): toma paredes por planta + escaleras desde Geometry.
         // Su lista global de paredes coincide en orden/ids con la del CIM (D8).
+        // Carriles de escalera ON en runs reales (D19: bias lateral subida/bajada
+        // gateado, sólo activa en tramos anchos; no afecta tests unitarios, que
+        // instancian el OM por otras vías con el gate en false por defecto).
         AgentProfile profile = CpmParameters.baglietoParisiSet1();
-        OperationalModel om = CpmOperationalModel.fromGeometry(geometry);
+        OperationalModel om = CpmOperationalModel.fromGeometry(geometry, true);
 
         // El dt efectivo lo acota el OM: usamos min(dt del escenario, dt que el
         // modelo considera estable para este profile). Así el escenario no fuerza

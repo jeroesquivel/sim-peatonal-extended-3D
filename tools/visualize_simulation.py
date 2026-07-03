@@ -38,6 +38,8 @@ STATE_COLORS = {
 
 TRACK_COLORS = ["#e74c3c", "#9b59b6", "#1abc9c", "#f39c12", "#34495e", "#16a085"]
 
+STAIR_FOOTPRINT_COLOR = "#b9770e"  # distinto del naranja de hops (#e67e22) para no confundir
+
 
 FLOOR_EPS = 1e-6
 
@@ -80,6 +82,48 @@ def parse_servers(path: str, floor: float | None = None) -> list[tuple[str, floa
                 continue
             servers.append((name, float(row[1]), float(row[2]), float(row[4]), float(row[5])))
     return servers
+
+
+def parse_stairs_2d(path: str, floor: float | None = None) -> list[tuple[float, float, float, float, float]]:
+    """STAIRS.csv: block,x1,y1,z1,x2,y2,z2,width[,speed] -> (x1,y1,x2,y2,width).
+
+    Con `floor` se quedan sólo los tramos cuyo pie o tope estén en esa planta
+    (para marcar la huella de la escalera al animar esa planta en 2D). Sin
+    `floor` devuelve todos los tramos.
+    """
+    stairs = []
+    if not os.path.isfile(path):
+        return stairs
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        next(reader, None)
+        for row in reader:
+            if not row or not row[0].strip():
+                continue
+            z1, z2 = float(row[3]), float(row[6])
+            if floor is not None and not (_floor_match(z1, floor) or _floor_match(z2, floor)):
+                continue
+            width = float(row[7]) if len(row) > 7 and row[7].strip() else 1.2
+            stairs.append((float(row[1]), float(row[2]), float(row[4]), float(row[5]), width))
+    return stairs
+
+
+def stair_footprint_corners(
+    x1: float, y1: float, x2: float, y2: float, width: float
+) -> list[tuple[float, float]] | None:
+    """Los 4 vértices del rectángulo de huella de un tramo (eje pie->tope, ancho `width`)."""
+    dx, dy = x2 - x1, y2 - y1
+    length = (dx * dx + dy * dy) ** 0.5
+    if length < 1e-9:
+        return None
+    nx, ny = -dy / length, dx / length  # versor perpendicular al eje
+    hw = width / 2.0
+    return [
+        (x1 + nx * hw, y1 + ny * hw),
+        (x2 + nx * hw, y2 + ny * hw),
+        (x2 - nx * hw, y2 - ny * hw),
+        (x1 - nx * hw, y1 - ny * hw),
+    ]
 
 
 def _cross(o: tuple[float, float], a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -291,6 +335,7 @@ def render_video(
     dpi: int,
     hops_by_track: dict[int, list[dict]] | None,
     hop_sample_sec: float,
+    stairs: list[tuple[float, float, float, float, float]] | None = None,
 ):
     if not frames:
         raise SystemExit("No hay frames en el archivo de salida.")
@@ -304,6 +349,24 @@ def render_video(
 
     for x1, y1, x2, y2 in walls:
         ax.plot([x1, x2], [y1, y2], color="black", linewidth=2.5, solid_capstyle="round", zorder=1)
+
+    # Huella de escalera: rectángulo tenue (sólo referencia visual, no es una pared).
+    for x1, y1, x2, y2, width in stairs or []:
+        corners = stair_footprint_corners(x1, y1, x2, y2, width)
+        if corners is None:
+            continue
+        ax.add_patch(
+            plt.Polygon(
+                corners,
+                closed=True,
+                fill=True,
+                facecolor=STAIR_FOOTPRINT_COLOR,
+                edgecolor=STAIR_FOOTPRINT_COLOR,
+                linewidth=0.8,
+                alpha=0.18,
+                zorder=1.5,
+            )
+        )
 
     for _name, x1, y1, x2, y2 in servers:
         rx, ry = min(x1, x2), min(y1, y2)
@@ -480,12 +543,14 @@ def main():
     fmt = args.format or ("mp4" if args.out.lower().endswith(".mp4") else "gif")
     walls_path = os.path.join(args.scenario, "WALLS.csv")
     servers_path = os.path.join(args.scenario, "SERVERS.csv")
+    stairs_path = os.path.join(args.scenario, "STAIRS.csv")
 
     frames = load_frames_with_times(args.output, args.floor)
     if args.stride > 1:
         frames = frames[::args.stride]  # submuestreo para outputs largos
     walls = parse_walls(walls_path, args.floor)
     servers = parse_servers(servers_path, args.floor)
+    stairs = parse_stairs_2d(stairs_path, args.floor)
 
     hops_by_track: dict[int, list[dict]] | None = None
     hop_list = parse_hops(args.hops) if args.hops else []
@@ -504,7 +569,7 @@ def main():
     print(f"Frames: {len(frames)}, escenario: {args.scenario}")
     render_video(
         frames, walls, servers, args.out, args.fps, fmt, args.dpi,
-        hops_by_track, args.hop_sample_sec,
+        hops_by_track, args.hop_sample_sec, stairs,
     )
 
 
