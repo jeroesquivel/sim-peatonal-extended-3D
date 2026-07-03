@@ -12,9 +12,9 @@
 
     <name>Pedestrian Dynamics Simulator</name>
     <description>
-        TP grupal de Simulación de Sistemas — simulador de dinámica peatonal.
-        Arquitectura definida en Docs/general/interface_contracts_v4.txt.
-        Esqueleto del monorepo a cargo del Grupo 6.
+        Trabajo Práctico Final de Simulación de Sistemas — simulador de dinámica peatonal
+        ampliado a 3D (mapas multiplanta conectados por escaleras). Escenario de estudio:
+        Escuela. Modelo físico: Contractile Particle Model (CPM).
     </description>
 
     <properties>
@@ -26,7 +26,7 @@
     </properties>
 
     <dependencies>
-        <!-- G3: Jackson para parsear parameters.json del Formato B del ScenarioLoader. -->
+        <!-- Jackson para parsear parameters.json del Formato B del ScenarioLoader. -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>

@@ -1,1 +1,0 @@
-python3 dxf_read.py plano.dxf segmentos_fromDXF.txt
