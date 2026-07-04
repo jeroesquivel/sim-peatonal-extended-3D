@@ -26,6 +26,74 @@ falta** para una entrega completa y aprobable, ordenado y con criterios de "hech
 
 ---
 
+## FASE 2 — Ajuste a las lecciones de la cátedra (auditoría vs wiki, 2026-07-03)
+
+Surge de comparar el TP contra la wiki de SDS (`SDS_Obsidian/wiki/conceptos/lecciones_correcciones.md`
+y `tps/TP_FINAL.md`). Hallazgos completos en [`REVISION_WIKI.md`](./REVISION_WIKI.md).
+
+> **Además (2026-07-04):** la verificación adversarial código-vs-enunciado encontró y se corrigieron
+> dos debilidades: **modo crisis inexistente** (→ perfil por generador con vd=2.0 en Evacuación, **D22**)
+> y **semilla no propagada a servers/selección** (→ `Seeds.mixOr`, **D23**). Suite: 143 tests verdes.
+> Los tres barridos se re-corrieron con la física/semillas nuevas.
+
+### Task 8 — Estadística con 5 realizaciones + barras de error *(crítico — ya costó nota en TP2/TP3)*
+- **Objetivo:** todo punto reportado = media ± σ sobre **5 semillas (1–5)**; barras de error visibles;
+  número de realizaciones declarado en el informe.
+- **Subtareas:** (a) correr `sweep_run.py` evacuación {40,80,120} e ingreso {1,5,10} con seeds 2–5
+  (seed 1 ya estaba); (b) `run_ingreso_nmax.py` {60,120,180} con seeds 1–5; (c) plots con agregación
+  cross-seed: errorbars (capsize=4) en los escalares, banda ±σ en población-vs-t (grilla temporal común
+  de dt_out, padding 0 tras el fin de corrida — método explicitado), pool de t_evac en el histograma.
+- **Hecho cuando:** figuras regeneradas con 5 seeds y el informe reporta media ± σ + n realizaciones.
+- **Estado:** 🔶 EN CURSO en la sesión 2026-07-03 (barridos + scripts + informe en paralelo).
+
+### Task 9 — Convenciones de figuras de la cátedra *(crítico)*
+- **Objetivo:** variable numérica (N, ventana, Nmax) ⇒ **viridis + colorbar**, no leyenda categórica
+  (corrección explícita TP3); títulos sin parámetros ni "(seed N)"; dpi=200; `\label`/`\ref` en todas
+  las figuras del informe.
+- **Estado:** 🔶 EN CURSO (misma sesión).
+
+### Task 10 — Informe con estructura de la cátedra
+- **Objetivo:** Introducción (definiciones con ecuaciones: t_evac, n_zona(t), Q=Nmax/T_a) /
+  Implementación (arquitectura SIN valores numéricos) / Simulaciones (valores + n realizaciones;
+  semilla NO es parámetro físico) / Resultados (introducir cada figura antes de analizarla) /
+  Conclusiones (frases compactas soportadas; sin claims de forma funcional sin log-log) /
+  Referencias (`\cite` del CPM). Autores Grupo 5. Tests reales (141).
+- **Estado:** 🔶 EN CURSO (misma sesión).
+
+### Task 11 — Presentación oral (final 10/07)
+- **Objetivo:** Beamer siguiendo las reglas duras de `lecciones_correcciones.md`.
+- **Subtareas:** estructura por estudio **(animación → serie temporal del observable → input vs
+  escalar)** en ese orden; animaciones **embebidas** para la oral (el PDF entregable lleva fotograma
+  + link a YouTube/Vimeo); **sin índice**; **sin slide final de referencias** (citas inline en una
+  esquina); títulos descriptivos sin parámetros ("Animación" no es título); máx **2 animaciones por
+  estudio**; barras de error visibles; ensayar y cronometrar (~13 min).
+- **Materia prima:** MP4 ya generados (`out/escuela_3d.mp4`, `out/escuela_p1.mp4`, `out/escuela_pb.mp4`)
+  + figuras de Fase 2. Falta: subir animaciones a YouTube/Vimeo, elegir las 2 por estudio.
+- **Esfuerzo:** M. **Depende de:** Tasks 8–10.
+
+### Task 12 — Empaquetado del código a entregar
+- **Objetivo:** zip con **solo el motor de simulación** (regla de la cátedra: sin postproc, sin
+  visualizadores, sin outputs, sin figuras, sin docs extra; en TP3/TP4 el límite fue 100 KB).
+- **Subtareas:** script `tools/package_delivery.sh` que arme `entrega/simped-codigo.zip` con
+  `src/main/`, `pom.xml` y un escenario mínimo; verificar tamaño y que compile solo
+  (`mvn -q compile` sobre el zip descomprimido). Confirmar con la cátedra si para el final piden
+  también los scripts de barrido (el enunciado los exige: si es así, incluir `tools/sweep_run.py`,
+  `tools/sweep_lib.py`, `tools/plot_*.py` y `build_escuela.py`, y dejar el resto afuera).
+- **Esfuerzo:** S. **Depende de:** cierre de Fase 2.
+
+### Task 13 — (Opcional) Robustecer claims de tendencia
+- **Objetivo:** si se quiere afirmar la forma del crecimiento de la congestión con Nmax, agregar
+  puntos (p. ej. Nmax ∈ {40,60,90,120,150,180}) y panel log-log (regla TP3: sin log-log no se
+  afirma ley de potencia/exponencial/supralinealidad).
+- **Esfuerzo:** S–M (corridas extra). **Depende de:** Task 8.
+
+### Task 14 — (Opcional) Actualizar la wiki `tps/TP_FINAL.md`
+- La página de la wiki todavía describe la **propuesta vieja** (incendio + humo + roles +
+  follow-the-crowd). El TP real es la ampliación 3D con Escuela/Evacuación/Ingreso. Actualizarla
+  para que la wiki refleje el estado real (es "página viva" del grupo).
+
+---
+
 ## Estado actual (ya hecho)
 
 - **Núcleo 3D (pasos 1–7):** `Vec3` + `AgentState.z`, input propaga `z` + escaleras, `Geometry` por

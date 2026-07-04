@@ -519,7 +519,10 @@ def _build_parameters_evacuacion(n_agents: int) -> dict:
     gen_agents = {
         "min_radius_distribution": {"type": "UNIFORM", "min": 0.15, "max": 0.15},
         "max_radius_distribution": {"type": "UNIFORM", "min": 0.30, "max": 0.32},
-        "max_velocity": 1.4,
+        # Modo crisis (D22): en evacuación los agentes caminan con vd de
+        # emergencia (2.0 m/s > 1.55 del perfil normal). App deriva de este
+        # max_velocity un AgentProfile propio (vd=ve=2.0) para estas zonas.
+        "max_velocity": 2.0,
     }
 
     generators = []
@@ -571,7 +574,9 @@ def _build_parameters_baseline() -> dict:
     gen_agents = {
         "min_radius_distribution": {"type": "UNIFORM", "min": 0.15, "max": 0.15},
         "max_radius_distribution": {"type": "UNIFORM", "min": 0.30, "max": 0.32},
-        "max_velocity": 1.4,
+        # 1.55 = vd del perfil default (baglietoParisiSet1). Desde D22 App honra
+        # max_velocity; se alinea al default para no cambiar el baseline validado.
+        "max_velocity": 1.55,
     }
     generation = {"period": GEN_PERIOD,
                   "quantity_distribution": {"type": "UNIFORM", "min": GEN_QTY[0], "max": GEN_QTY[1]}}
@@ -712,7 +717,9 @@ def _build_parameters_ingreso(window_min: float) -> dict:
     gen_agents = {
         "min_radius_distribution": {"type": "UNIFORM", "min": 0.15, "max": 0.15},
         "max_radius_distribution": {"type": "UNIFORM", "min": 0.30, "max": 0.32},
-        "max_velocity": 1.4,
+        # Ingreso NO es crisis: caminata normal (1.55 = vd del perfil default;
+        # ver D22 — App honra max_velocity desde entonces).
+        "max_velocity": 1.55,
     }
     generators = []
     for e in INGRESO_ENTRADAS:

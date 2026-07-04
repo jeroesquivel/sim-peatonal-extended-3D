@@ -8,51 +8,65 @@ Observable primario : población vs. tiempo en la zona de congestión del
                        por caudal (ventana de llegada en minutos).
 Observable escalar   : ocupación máxima y promedio en esa zona vs. caudal.
 
+**Agrega MÚLTIPLES realizaciones (semillas)**, como pide la cátedra (>=5
+realizaciones por punto, barras de error / bandas visibles, indicando el número
+de realizaciones y explicitando el método al promediar evoluciones temporales).
 Lee los outputs que deja tools/sweep_run.py --mode ingreso con el layout:
     out/sweeps/ingreso/v<window_min>/seed<seed>/output.csv
 
-Reusa tools/sweep_lib.py (zone_population) para contar agentes dentro del
-rectángulo de contrato por frame de output, filtrando por planta (z=0, PB).
+Funciona con cualquier subconjunto de seeds presente (incluida 1 sola: en ese
+caso sin banda ni barras de error, sin romperse).
+
+Método de agregación (por cada ventana/caudal):
+  - Población vs. t: se cuenta la población en la zona por frame en cada seed y
+    se PROMEDIA la curva ENTRE seeds sobre la grilla temporal común. Todas las
+    corridas de un mismo caudal comparten la misma dt_out ⇒ la misma grilla de
+    tout (se verifica con assert en sweep_lib.align_population_curves). Si una
+    corrida terminara con menos frames, su curva se rellena con 0 hasta el
+    horizonte común (la zona queda vacía al terminar). Se dibuja la curva media
+    + banda ±σ (fill_between).
+  - Escalar: ocupación máxima por seed -> media±σ entre seeds; ocupación
+    promedio por seed (sobre el horizonte común, con padding 0) -> media±σ.
+
+Reusa tools/sweep_lib.py (zone_population, discover_values, resolve_seed_csvs,
+align_population_curves, column_mean_std, mean_std).
 
 Uso:
     python tools/plot_ingreso.py \\
-        [--sweep-dir out/sweeps/ingreso] [--seed 1] [--out-prefix out/ingreso] \\
+        [--sweep-dir out/sweeps/ingreso] [--seeds all] [--out-prefix out/ingreso] \\
         [--zone X0 Y0 X1 Y1]
 
 Genera:
-    <out-prefix>_poblacion.png — población vs. tiempo, una curva por caudal
-    <out-prefix>_scalar.png    — ocupación máxima y promedio vs. caudal
+    <out-prefix>_poblacion.png — población media±σ vs. tiempo, una curva por caudal
+    <out-prefix>_scalar.png    — ocupación máxima y promedio vs. caudal (media±σ)
 """
 
 from __future__ import annotations
 
 import argparse
-import glob
 import os
-import re
-import statistics
 import sys
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import Normalize
 
 sys.path.insert(0, os.path.dirname(__file__))
 import sweep_lib  # noqa: E402  (import tras el sys.path.insert)
 
-# Paleta (dataviz skill, references/palette.md): categórica en orden fijo.
+# Paleta.
+#  - Población vs. t: una curva por VARIABLE NUMÉRICA (ventana de llegada) ->
+#    cmap gradual (viridis) + colorbar etiquetada, NO leyenda categórica.
+#  - Escalar: dos series de DISTINTA NATURALEZA (promedio vs máximo) -> leyenda.
 _COLOR_PROM = "#2a78d6"    # slot 1 (blue) — serie "promedio"
 _COLOR_MAX = "#1baf7a"     # slot 2 (aqua) — serie "máximo"
-_COLOR_CAUDAL_3 = "#eda100"  # slot 3 (yellow) — tercera curva de población (10 min)
 _COLOR_GRID = "#e1e0d9"
 _COLOR_MUTED = "#898781"
 _COLOR_INK = "#0b0b0b"
-
-# Colores de las curvas de población, en el orden en que aparecen los
-# caudales (1 min, 5 min, 10 min, ...). Si hubiera más de 3 caudales, el
-# ciclo se repite (no se espera con el barrido mínimo de 3 puntos).
-_CURVE_COLORS = [_COLOR_PROM, _COLOR_MAX, _COLOR_CAUDAL_3]
+_CMAP = "viridis"
 
 # Zona observable (D20): rectángulo x0,y0,x1,y1 en z=0 (PB).
 #
@@ -72,35 +86,28 @@ ZONA_ESCALERA_SUR = (42.0, 8.0, 48.0, 14.0)   # zona del contrato (corredor pre-
 ZLEVEL = 0.0
 
 
-def discover_caudales(sweep_dir: str, seed: int) -> list[tuple[int, str]]:
-    """Escanea ``sweep_dir/v*/seed<seed>/output.csv`` y devuelve una lista
-    ``[(window_min, csv_path), ...]`` ordenada por ventana ascendente."""
-    pattern = os.path.join(sweep_dir, "v*", f"seed{seed}", "output.csv")
-    found: list[tuple[int, str]] = []
-    for path in sorted(glob.glob(pattern)):
-        v_dir = os.path.basename(os.path.dirname(os.path.dirname(path)))
-        m = re.match(r"^v(\d+)$", v_dir)
-        if not m:
-            print(f"[WARN] directorio inesperado (no matchea 'vN'): '{v_dir}', se ignora {path}")
-            continue
-        found.append((int(m.group(1)), path))
-    found.sort(key=lambda t: t[0])
-    return found
+def _color_for(value: float, norm: Normalize) -> tuple:
+    return plt.get_cmap(_CMAP)(norm(value))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Gráficos del sub-escenario Ingreso: población vs. tiempo "
-                     "en la zona antes de la escalera principal, y curva "
-                     "escalar de ocupación máxima/promedio vs. caudal."
+        description="Gráficos del sub-escenario Ingreso: población media±σ vs. "
+                     "tiempo en la zona de congestión, y curva escalar de "
+                     "ocupación máxima/promedio vs. caudal, agregando seeds."
     )
     parser.add_argument(
         "--sweep-dir", default="out/sweeps/ingreso",
         help="Directorio raíz del barrido de ingreso (default: %(default)s)",
     )
     parser.add_argument(
-        "--seed", type=int, default=1,
-        help="Semilla/réplica a graficar, dentro de cada v<window_min>/seed<seed>/ (default: %(default)s)",
+        "--seeds", default="all",
+        help="Semillas a agregar: lista separada por comas (p.ej. '1,2,3') o "
+             "'all' para autodescubrir todas las presentes (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=None,
+        help="[DEPRECADO] alias de --seeds <N> (una sola semilla).",
     )
     parser.add_argument(
         "--out-prefix", default="out/ingreso",
@@ -109,123 +116,179 @@ def main() -> None:
     parser.add_argument(
         "--zone", type=float, nargs=4, default=None, metavar=("X0", "Y0", "X1", "Y1"),
         help=f"Rectángulo de la zona observable x0 y0 x1 y1 (default: {ZONA}, "
-             f"la zona de contrato antes de la escalera SUR)",
+             f"el frente del kiosco del recreo)",
     )
     args = parser.parse_args()
+
+    if args.seed is not None:
+        print(f"[WARN] --seed {args.seed} está DEPRECADO: usá --seeds {args.seed}. "
+              f"Interpretado como --seeds {args.seed}.")
+        seeds_sel = [args.seed]
+    else:
+        seeds_sel = sweep_lib.parse_seeds_arg(args.seeds)
 
     zona = tuple(args.zone) if args.zone is not None else ZONA
     x0, y0, x1, y1 = zona
 
-    caudales = discover_caudales(args.sweep_dir, args.seed)
-    if not caudales:
+    values = sweep_lib.discover_values(args.sweep_dir)
+    if not values:
         print(
-            f"[ERROR] no se encontró ningún output.csv en "
-            f"'{args.sweep_dir}/v*/seed{args.seed}/output.csv'. "
-            f"¿Corriste tools/sweep_run.py --mode ingreso?"
+            f"[ERROR] no se encontró ningún v<win>/seed<S>/output.csv bajo "
+            f"'{args.sweep_dir}'. ¿Corriste tools/sweep_run.py --mode ingreso?"
         )
         sys.exit(1)
 
-    results: dict[int, tuple[list[float], list[int]]] = {}
-    for window_min, csv_path in caudales:
-        if not os.path.isfile(csv_path):
-            print(f"[WARN] ventana={window_min} min: no existe '{csv_path}'. Se omite.")
-            continue
-        try:
-            times, counts = sweep_lib.zone_population(csv_path, x0, y0, x1, y1, zlevel=ZLEVEL)
-        except Exception as exc:
-            print(f"[WARN] ventana={window_min} min: no se pudo leer/parsear '{csv_path}' ({exc}). Se omite.")
-            continue
-        if not counts:
-            print(f"[WARN] ventana={window_min} min: 0 frames en '{csv_path}' (o CSV vacío).")
-        results[window_min] = (times, counts)
+    # Por cada ventana: curva media±σ (población) y escalares por semilla.
+    curve_mean: dict[int, tuple[list[float], list[float], list[float] | None]] = {}
+    per_seed_peak: dict[int, list[float]] = {}   # ocupación máxima por seed
+    per_seed_mean: dict[int, list[float]] = {}   # ocupación promedio (horizonte común) por seed
+    peak_time_mean: dict[int, float] = {}        # t del pico de la curva media
+    n_seeds: dict[int, int] = {}
 
-    if not results:
-        print("[ERROR] ninguna ventana pudo procesarse (todas fallaron o sin datos). Abortando.")
+    for window_min, vdir in values:
+        seed_csvs = sweep_lib.resolve_seed_csvs(vdir, seeds_sel)
+        if seeds_sel is not None:
+            faltan = [s for s in seeds_sel if s not in {s2 for s2, _ in seed_csvs}]
+            if faltan:
+                print(f"[WARN] ventana={window_min} min: seeds pedidas ausentes {faltan} "
+                      f"(se usan {[s for s, _ in seed_csvs]}).")
+        if not seed_csvs:
+            print(f"[WARN] ventana={window_min} min: sin seeds procesables. Se omite.")
+            continue
+        curves: list[tuple[list[float], list[int]]] = []
+        for seed, csv_path in seed_csvs:
+            try:
+                times, counts = sweep_lib.zone_population(csv_path, x0, y0, x1, y1, zlevel=ZLEVEL)
+            except Exception as exc:
+                print(f"[WARN] ventana={window_min} min seed={seed}: no se pudo parsear "
+                      f"'{csv_path}' ({exc}). Se omite esa seed.")
+                continue
+            if not counts:
+                print(f"[WARN] ventana={window_min} min seed={seed}: 0 frames.")
+                continue
+            curves.append((times, counts))
+        if not curves:
+            print(f"[WARN] ventana={window_min} min: ninguna seed con datos. Se omite.")
+            continue
+        times_ref, matrix, n = sweep_lib.align_population_curves(curves)
+        means, stds = sweep_lib.column_mean_std(matrix)
+        curve_mean[window_min] = (times_ref, means, stds)
+        # escalares por semilla, sobre la matriz alineada (padding 0 al final)
+        per_seed_peak[window_min] = [max(row) for row in matrix]
+        per_seed_mean[window_min] = [sum(row) / len(row) for row in matrix]
+        n_seeds[window_min] = n
+        if means:
+            peak_time_mean[window_min] = times_ref[means.index(max(means))]
+
+    if not curve_mean:
+        print("[ERROR] ninguna ventana pudo procesarse. Abortando.")
         sys.exit(1)
 
-    windows_ok = sorted(results.keys())
+    windows_ok = sorted(curve_mean.keys())
+    norm = Normalize(vmin=min(windows_ok),
+                     vmax=max(windows_ok) if max(windows_ok) != min(windows_ok) else min(windows_ok) + 1)
 
-    # ---- 1) Población vs. tiempo, todas las curvas superpuestas ----------
+    # ---- 1) Población vs. tiempo: curva media + banda ±σ por caudal ----------
     fig, ax = plt.subplots(figsize=(8, 5))
-    any_curve = False
-    for i, window_min in enumerate(windows_ok):
-        times, counts = results[window_min]
-        if not times:
+    for window_min in windows_ok:
+        times_ref, means, stds = curve_mean[window_min]
+        if not times_ref:
             continue
-        color = _CURVE_COLORS[i % len(_CURVE_COLORS)]
-        ax.plot(times, counts, linewidth=2, color=color, label=f"{window_min} min")
-        any_curve = True
-    if not any_curve:
-        ax.text(0.5, 0.5, "sin datos de población", ha="center", va="center",
-                color=_COLOR_MUTED, transform=ax.transAxes)
+        color = _color_for(window_min, norm)
+        ax.plot(times_ref, means, linewidth=2, color=color)
+        if stds is not None:
+            lo = [m - s for m, s in zip(means, stds)]
+            hi = [m + s for m, s in zip(means, stds)]
+            ax.fill_between(times_ref, lo, hi, color=color, alpha=0.18, linewidth=0)
     ax.set_xlabel("tiempo [s]")
-    ax.set_ylabel("agentes en la zona")
-    ax.set_title(f"Población vs. tiempo en la zona de congestión del ingreso (seed {args.seed})")
+    ax.set_ylabel("agentes en la zona [agentes]")
+    ax.set_title("Población vs. tiempo en la zona de congestión del ingreso")
     ax.grid(color=_COLOR_GRID, linewidth=0.8, zorder=0)
     ax.set_axisbelow(True)
     for spine in ("top", "right"):
         ax.spines[spine].set_visible(False)
-    if any_curve:
-        ax.legend(frameon=False)
+    sm = ScalarMappable(norm=norm, cmap=_CMAP)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.02)
+    cbar.set_label("ventana de llegada [min]")
     fig.tight_layout()
     poblacion_path = f"{args.out_prefix}_poblacion.png"
     os.makedirs(os.path.dirname(poblacion_path) or ".", exist_ok=True)
-    fig.savefig(poblacion_path, dpi=130)
+    fig.savefig(poblacion_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
 
-    # ---- 2) Escalar: ocupación máxima y promedio vs. caudal --------------
-    windows_scalar: list[int] = []
-    means: list[float] = []
-    maxs: list[float] = []
-    peak_times: dict[int, float] = {}
+    # ---- 2) Escalar: ocupación máxima y promedio vs. caudal (media±σ) --------
+    win_scalar: list[int] = []
+    mean_of_peak: list[float] = []
+    std_of_peak: list[float] = []
+    mean_of_mean: list[float] = []
+    std_of_mean: list[float] = []
+    single_seed_pts: list[int] = []
     for window_min in windows_ok:
-        times, counts = results[window_min]
-        if not counts:
-            continue
-        windows_scalar.append(window_min)
-        means.append(statistics.mean(counts))
-        maxs.append(max(counts))
-        peak_idx = counts.index(max(counts))
-        peak_times[window_min] = times[peak_idx]
+        win_scalar.append(window_min)
+        mp, sp = sweep_lib.mean_std(per_seed_peak[window_min])
+        mm, smn = sweep_lib.mean_std(per_seed_mean[window_min])
+        mean_of_peak.append(mp)
+        mean_of_mean.append(mm)
+        std_of_peak.append(sp if sp is not None else 0.0)
+        std_of_mean.append(smn if smn is not None else 0.0)
+        if sp is None:
+            single_seed_pts.append(window_min)
 
     fig2, ax2 = plt.subplots(figsize=(6.5, 4.5))
-    if windows_scalar:
-        ax2.plot(windows_scalar, means, marker="o", markersize=7, linewidth=2,
-                  color=_COLOR_PROM, label="promedio")
-        ax2.plot(windows_scalar, maxs, marker="s", markersize=7, linewidth=2,
-                  color=_COLOR_MAX, label="máximo")
+    any_err = any(s > 0 for s in std_of_peak + std_of_mean)
+    if any_err:
+        ax2.errorbar(win_scalar, mean_of_mean, yerr=std_of_mean, marker="o",
+                     markersize=7, linewidth=2, capsize=4, color=_COLOR_PROM,
+                     label="promedio")
+        ax2.errorbar(win_scalar, mean_of_peak, yerr=std_of_peak, marker="s",
+                     markersize=7, linewidth=2, capsize=4, color=_COLOR_MAX,
+                     label="máximo")
     else:
-        ax2.text(0.5, 0.5, "sin datos de ocupación", ha="center", va="center",
-                  color=_COLOR_MUTED, transform=ax2.transAxes)
+        ax2.plot(win_scalar, mean_of_mean, marker="o", markersize=7, linewidth=2,
+                 color=_COLOR_PROM, label="promedio")
+        ax2.plot(win_scalar, mean_of_peak, marker="s", markersize=7, linewidth=2,
+                 color=_COLOR_MAX, label="máximo")
     ax2.set_xlabel("ventana de llegada [min]")
     ax2.set_ylabel("ocupación de la zona [agentes]")
-    ax2.set_title(f"Ocupación máxima y promedio vs. caudal (seed {args.seed})")
+    ax2.set_title("Ocupación máxima y promedio vs. caudal")
     ax2.grid(color=_COLOR_GRID, linewidth=0.8, zorder=0)
     ax2.set_axisbelow(True)
     for spine in ("top", "right"):
         ax2.spines[spine].set_visible(False)
-    if windows_scalar:
-        ax2.legend(frameon=False)
+    ax2.legend(frameon=False)
     fig2.tight_layout()
     scalar_path = f"{args.out_prefix}_scalar.png"
-    fig2.savefig(scalar_path, dpi=130)
+    fig2.savefig(scalar_path, dpi=200, bbox_inches="tight")
     plt.close(fig2)
 
-    # ---- 3) Tabla a stdout -------------------------------------------------
+    # ---- 3) Tabla a stdout ---------------------------------------------------
     print()
-    header = f"{'caudal':>8} | {'pico':>8} | {'prom':>10} | {'t_pico':>10}"
+    print(f"Zona observable: x∈[{x0},{x1}]  y∈[{y0},{y1}]  z={ZLEVEL}")
+    print(f"Realizaciones (seeds) por ventana — selección: "
+          f"{'all' if seeds_sel is None else seeds_sel}")
+    print("Método población vs. t: promedio entre seeds sobre grilla común "
+          "(misma dt_out; padding 0 si una corrida termina antes).")
+    header = (f"{'caudal[min]':>11} | {'n_seeds':>7} | {'pico±σ':>16} | "
+              f"{'prom±σ':>16} | {'t_pico[s]':>10}")
     print(header)
     print("-" * len(header))
     for window_min in windows_ok:
-        times, counts = results[window_min]
-        if counts:
-            prom = statistics.mean(counts)
-            pico = max(counts)
-            t_pico = peak_times.get(window_min, float("nan"))
-            print(f"{window_min:>8} | {pico:>8} | {prom:>10.2f} | {t_pico:>10.2f}")
-        else:
-            print(f"{window_min:>8} | {'--':>8} | {'--':>10} | {'--':>10}")
+        mp, sp = sweep_lib.mean_std(per_seed_peak[window_min])
+        mm, smn = sweep_lib.mean_std(per_seed_mean[window_min])
+        pico_s = f"{mp:6.2f} ± {(sp if sp is not None else 0.0):5.2f}"
+        prom_s = f"{mm:6.2f} ± {(smn if smn is not None else 0.0):5.2f}"
+        t_pico = peak_time_mean.get(window_min, float("nan"))
+        print(f"{window_min:>11} | {n_seeds[window_min]:>7} | {pico_s:>16} | "
+              f"{prom_s:>16} | {t_pico:>10.2f}")
 
+    if single_seed_pts:
+        print(f"\n[nota] ventana={single_seed_pts} con 1 sola semilla: sin banda ni "
+              f"barra de error (σ no estimable con <2 realizaciones).")
+    if any_err:
+        print("[nota] barras/banda de error = σ muestral (ddof=1) entre semillas; si "
+              "quedan más chicas que el marker (capsize=4) la dispersión entre "
+              "realizaciones es baja.")
     print()
     print(f"Guardado: {poblacion_path}")
     print(f"Guardado: {scalar_path}")

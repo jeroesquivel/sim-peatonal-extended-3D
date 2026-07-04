@@ -46,4 +46,28 @@ public final class Seeds {
         }
         return new Random();
     }
+
+    /**
+     * Semilla efectiva para streams que HOY usan una constante fija (servers,
+     * selección de plan/salida/dwell). Si {@code simped.seed} está seteada y
+     * parsea a {@code long}, devuelve {@code seed ^ salt.hashCode()} — el
+     * stream varía entre réplicas del barrido. Si no, devuelve
+     * {@code fallback} — exactamente el comportamiento histórico (determinista
+     * sin configuración), sin cambios para tests ni corridas sueltas.
+     *
+     * @param fallback semilla histórica del stream (la constante de hoy).
+     * @param salt     identificador que distingue este stream de los demás.
+     * @return la semilla a usar para construir el RNG del stream.
+     */
+    public static long mixOr(long fallback, String salt) {
+        String prop = System.getProperty("simped.seed");
+        if (prop != null && !prop.isBlank()) {
+            try {
+                return Long.parseLong(prop.trim()) ^ (long) salt.hashCode();
+            } catch (NumberFormatException ignored) {
+                // No parseable: cae al fallback determinista.
+            }
+        }
+        return fallback;
+    }
 }

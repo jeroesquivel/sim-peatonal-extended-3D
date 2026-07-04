@@ -13,6 +13,7 @@ import ar.edu.itba.simped.core.LocationTargetSelector;
 import ar.edu.itba.simped.core.ObjectiveSelection;
 import ar.edu.itba.simped.core.PlanStep;
 import ar.edu.itba.simped.core.PlanTemplate;
+import ar.edu.itba.simped.core.Seeds;
 import ar.edu.itba.simped.core.Segment;
 import ar.edu.itba.simped.core.Task;
 import ar.edu.itba.simped.core.TaskStep;
@@ -154,6 +155,9 @@ public final class AgentAssembler {
         long seed = -7046029254386353131L;   // 0x9E3779B97F4A7C15
         seed = 31L * seed + state.id();
         seed = 31L * seed + t.name().hashCode();
+        // D23: con simped.seed seteada, la selección (p. ej. de salida en
+        // exit_selection) varía entre réplicas; sin setear, XOR 0 = hoy.
+        seed ^= Seeds.mixOr(0L, "assembler.selection");
         return new SplittableRandom(seed);
     }
 
@@ -223,6 +227,7 @@ public final class AgentAssembler {
         // posición, para que dos targets elegidos no compartan el mismo dwell.
         seed = 31L * seed + Double.hashCode(step.target().x());
         seed = 31L * seed + Double.hashCode(step.target().y());
+        seed ^= Seeds.mixOr(0L, "assembler.dwell");   // D23
         return new SplittableRandom(seed);
     }
 
@@ -232,6 +237,7 @@ public final class AgentAssembler {
         seed = 31L * seed + template.name().hashCode();
         seed = 31L * seed + step.blockName().hashCode();
         seed = 31L * seed + stepIndex;
+        seed ^= Seeds.mixOr(0L, "assembler.grouped-location");   // D23
         return seed;
     }
 

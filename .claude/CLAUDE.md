@@ -295,11 +295,42 @@ sirven de referencia de cómo se generan los CSV, pero **no forman parte de este
 
 ## Estado del trabajo y pendientes (retomar acá)
 
-**Última sesión: 2026-07-01.** Se afinó el baseline de la Escuela para una animación con narrativa
-completa (ingreso → clase → evacuación por escaleras) y se diagnosticó un comportamiento raro. La
-fuente de verdad de las decisiones es [`DECISIONES.md`](./DECISIONES.md) (D1–D14).
+**Última sesión: 2026-07-03/04 (auditoría vs wiki de SDS + Fase 2).** La fuente de verdad de las
+decisiones es [`DECISIONES.md`](./DECISIONES.md) (**D1–D23**); la auditoría contra la wiki está en
+[`REVISION_WIKI.md`](./REVISION_WIKI.md) y el plan vigente en [`PLAN_ENTREGA.md`](./PLAN_ENTREGA.md)
+(Fase 2, Tasks 8–14).
 
-**Hecho esta sesión (2026-07-01):**
+**Hecho (2026-07-03/04):**
+- **Auditoría completa contra la wiki de SDS** (`SDS_Obsidian/`, en particular
+  `lecciones_correcciones.md`): hallazgos y fixes en `REVISION_WIKI.md`.
+- **Estadística con 5 realizaciones** (semillas 1–5) en TODOS los resultados: barridos re-corridos,
+  `plot_evacuacion.py`/`plot_ingreso.py`/`run_ingreso_nmax.py` con `--seeds all` (agregación
+  cross-seed, errorbars capsize=4, banda ±σ en población-vs-t, viridis+colorbar para inputs
+  numéricos, dpi=200, sin seed en títulos).
+- **D22 — modo crisis**: `max_velocity` del Formato B ahora se honra (era código muerto) → perfil
+  por generador; Evacuación con **vd=ve=2.0 m/s**; dt acotado por el perfil más rápido (0.0375 s en
+  evac). Verificado: v mediana 2.00 m/s en el plano.
+- **D23 — semilla a todos los streams**: `Seeds.mixOr` en servers (service-time, softmax) y
+  selección (salida/aula/dwell). Sin `simped.seed` el comportamiento es idéntico (fallback a las
+  constantes históricas). **Suite: 143 tests verdes** (2 nuevos).
+- **Informe reestructurado** a la estructura de la cátedra (Introducción con observables definidos
+  por ecuación / Implementación sin valores numéricos / Simulaciones con parámetros y 5
+  realizaciones / Resultados con \ref antes de analizar / Conclusiones compactas / Referencias:
+  Baglietto-Parisi 2011, Martin-Parisi 2024, Helbing 2000). Números finales media±σ cargados.
+  **PDF: 11 páginas, 0 refs sin resolver** (`informe/informe.pdf`).
+- Resultados finales (5 seeds): evac prom 48.2±0.6 / 59.6±1.2 / 66.7±3.6 s y máx 93.5 / 121.6 /
+  151.2 s para N=40/80/120 (distribución **bimodal** PB/P1); ingreso pico 53.4±1.8 / 21.0±3.6 /
+  5.0±0.7 para Ta=1/5/10 min; Nmax pico 4.8 / 21.0 / 51.6 para 60/120/180. Heatmaps regenerados.
+- **Wiki actualizada**: `SDS_Obsidian/wiki/tps/TP_FINAL.md` reescrita al enunciado real (3D), con
+  índice y log al día.
+
+**Pendiente (ver PLAN_ENTREGA Fase 2):** presentación oral Beamer (Task 11, reglas duras de la
+cátedra: animación → serie → escalar, embebidas, sin índice, citas inline) y empaquetado del código
+a entregar (Task 12, solo motor). Opcional: más puntos + log-log (Task 13).
+
+---
+
+**Sesión 2026-07-01 (histórico):**
 - **Baseline "día escolar" con generación FINITA** (D13): el `inactive_time=0` del D12 hacía que el
   generador spawneara para siempre (edificio nunca se vaciaba, sólo 18/100 evacuaban). Se cambió a un
   **burst matinal finito** (`ARRIVAL_WINDOW=60`, `inactive_time=1e6`, `max_time=240`, `DOOR=2.4`) ⇒ ~30

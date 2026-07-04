@@ -179,7 +179,7 @@ def main() -> None:
     if args.title:
         fig.suptitle(args.title, fontsize=13)
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    fig.savefig(args.out, dpi=130, bbox_inches="tight")
+    fig.savefig(args.out, dpi=200, bbox_inches="tight")
     plt.close(fig)
     print(f"Guardado: {args.out}  (vmax={vmax:.2f}, celda={args.cell} m)")
 

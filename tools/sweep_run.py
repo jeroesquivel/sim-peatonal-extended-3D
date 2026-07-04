@@ -7,12 +7,10 @@ Para cada valor de ``--values`` genera un escenario (Formato B) con
 (``ar.edu.itba.simped.App``, ``om=cpm`` por default) pasando
 ``-Dsimped.seed=<seed>`` para que la corrida sea reproducible.
 
-Pensado para ser reusado tal cual por los sub-escenarios Evacuación (Task 2,
-``--mode evacuacion``, value = capacidad N) e Ingreso (Task 4, ``--mode
-ingreso``, value = caudal), una vez que ``build_escuela.py`` implemente esas
-ramas de ``build_parameters()`` (hoy sólo ``baseline`` funciona; correr este
-runner con ``--mode evacuacion``/``--mode ingreso`` falla al generar el
-escenario, con el ``NotImplementedError`` de ``build_escuela.py``).
+Usado por los sub-escenarios Evacuación (``--mode evacuacion``, value =
+capacidad N) e Ingreso (``--mode ingreso``, value = ventana de llegada en
+minutos); ``--mode baseline`` sirve de smoke test. Los tres modos están
+implementados en ``build_escuela.py``.
 
 Requisitos:
     - Java 21 + Maven 3.9+ en PATH.

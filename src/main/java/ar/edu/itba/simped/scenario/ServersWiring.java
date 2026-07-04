@@ -21,6 +21,8 @@ import ar.edu.itba.simped.environment.servers.model.ServerConfig;
 import ar.edu.itba.simped.environment.servers.model.ServerType;
 import ar.edu.itba.simped.environment.servers.queue.QueueLine;
 import ar.edu.itba.simped.environment.servers.service.ServiceTimeSampler;
+import ar.edu.itba.simped.core.Seeds;
+import ar.edu.itba.simped.environment.servers.assignment.SoftmaxServerAssigner;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -119,8 +121,15 @@ public final class ServersWiring {
             }
         };
 
+        // RNGs de servers derivados de simped.seed cuando está seteada (D23):
+        // sin semilla global, caen a las constantes históricas (SEED=0) y el
+        // comportamiento es idéntico al de siempre. assigner/v0/alpha replican
+        // los defaults del constructor de conveniencia de ServersModule.
         ServersModule module = new ServersModule(servers, targetSink, eventSink,
-                new ServiceTimeSampler(new Random(SEED)), params);
+                new ServiceTimeSampler(new Random(Seeds.mixOr(SEED, "servers.service-time"))),
+                params,
+                new SoftmaxServerAssigner(new Random(Seeds.mixOr(0L, "servers.softmax")), 1.0),
+                1.3, 1.0);
         moduleHolder[0] = module;
         return module;
     }

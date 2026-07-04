@@ -134,7 +134,7 @@ def parse_sim_output_3d(path: str) -> list[tuple[float, list[dict]]]:
 
 
 def render(scenario: str, output: str, out: str, fps: int, dpi: int, elev: float, azim: float,
-           stride: int = 1):
+           stride: int = 1, snapshot_t: float | None = None):
     walls = parse_walls_3d(os.path.join(scenario, "WALLS.csv"))
     stairs = parse_stairs(os.path.join(scenario, "STAIRS.csv"))
     frames = parse_sim_output_3d(output)
@@ -173,6 +173,22 @@ def render(scenario: str, output: str, out: str, fps: int, dpi: int, elev: float
     scatter = ax.scatter([], [], [], s=25, depthshade=True)
     title = ax.set_title("")
 
+    # Modo snapshot: un único frame (el más cercano a snapshot_t) a PNG, SIN el
+    # título t/agentes (las condiciones van en el caption del informe, no en la
+    # figura — regla de la cátedra).
+    if snapshot_t is not None:
+        i = min(range(len(frames)), key=lambda k: abs(frames[k][0] - snapshot_t))
+        tout, agents = frames[i]
+        scatter.remove()
+        ax.scatter([a["x"] for a in agents], [a["y"] for a in agents],
+                   [a["z"] for a in agents],
+                   s=25, c=[STATE_COLORS.get(a["state"], "#7f8c8d") for a in agents],
+                   depthshade=True)
+        os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+        fig.savefig(out, dpi=dpi, bbox_inches="tight", pad_inches=0.4)
+        print(f"Guardado: {out}  (snapshot t={tout:.1f} s, {len(agents)} agentes)")
+        return
+
     def update(i):
         nonlocal scatter
         tout, agents = frames[i]
@@ -206,8 +222,11 @@ def main():
     p.add_argument("--elev", type=float, default=25.0, help="Elevación de cámara (grados)")
     p.add_argument("--azim", type=float, default=-60.0, help="Azimut de cámara (grados, ~45°)")
     p.add_argument("--stride", type=int, default=1, help="Submuestrear 1 de cada N frames (outputs largos)")
+    p.add_argument("--snapshot", type=float, default=None, metavar="T",
+                   help="En vez de animar, guarda un PNG del frame más cercano a t=T (sin título)")
     args = p.parse_args()
-    render(args.scenario, args.output, args.out, args.fps, args.dpi, args.elev, args.azim, args.stride)
+    render(args.scenario, args.output, args.out, args.fps, args.dpi, args.elev, args.azim,
+           args.stride, args.snapshot)
 
 
 if __name__ == "__main__":

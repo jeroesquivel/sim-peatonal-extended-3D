@@ -1,5 +1,6 @@
 package ar.edu.itba.simped.environment.generator;
 
+import ar.edu.itba.simped.core.AgentProfile;
 import ar.edu.itba.simped.core.AgentState;
 import ar.edu.itba.simped.core.PlanTemplate;
 import ar.edu.itba.simped.core.Rectangle;
@@ -30,6 +31,33 @@ class ConfigurablePedestrianGeneratorTest {
             double activeTime, double rateOrCount, GenerationMode mode) {
         return new ConfigurablePedestrianGenerator(
                 "test", activeTime, 0.0, BIG_ZONE, rateOrCount, mode, PLANS, List::of, 0.0);
+    }
+
+    @Test
+    void profileOverrideIsSetOnSpawnedAgents() {
+        // D22: un generador con perfil propio (p. ej. crisis en evacuación)
+        // debe parir agentes con ese profile ya seteado, para que el assembler
+        // no les pise el default.
+        AgentProfile crisis = new AgentProfile(2.0, 0.5, 0.15, 0.32, 0.9, 2.0);
+        ConfigurablePedestrianGenerator g = new ConfigurablePedestrianGenerator(
+                "test", 60.0, 0.0, BIG_ZONE, 5, GenerationMode.BATCH, PLANS, List::of, 0.0, crisis);
+
+        List<Agent> spawned = g.spawnInitial();
+        assertEquals(5, spawned.size());
+        for (Agent a : spawned) {
+            assertEquals(crisis, a.state().profile(),
+                    "el agente debe nacer con el perfil override del generador");
+        }
+    }
+
+    @Test
+    void withoutProfileOverrideAgentsAreBornWithNullProfile() {
+        // Sin override el profile queda null y lo asigna el assembler (default).
+        ConfigurablePedestrianGenerator g = gen(60.0, 3, GenerationMode.BATCH);
+        for (Agent a : g.spawnInitial()) {
+            assertEquals(null, a.state().profile(),
+                    "sin override, el profile lo asigna después el assembler");
+        }
     }
 
     @Test

@@ -13,8 +13,12 @@ Uso como script (resumen rápido de un output.csv):
 
 from __future__ import annotations
 
+import glob
+import os
+import re
 import sys
 from collections import defaultdict
+from statistics import mean, stdev
 from typing import Iterator
 
 
@@ -105,6 +109,148 @@ def zone_population(
             n += 1
         counts.append(n)
     return times, counts
+
+
+# ---------------------------------------------------------------------------
+# Agregación multi-semilla (realizaciones)
+#
+# La cátedra exige >=5 realizaciones por punto, con barras de error siempre
+# visibles y explicitando el método al promediar evoluciones temporales. Estos
+# helpers son PUROS (stdlib) para que los importen los scripts de graficado sin
+# arrastrar matplotlib: descubren las seeds presentes en el layout de
+# tools/sweep_run.py (``<sweep>/v<value>/seed<S>/output.csv``), resuelven la
+# selección de seeds pedida por CLI, y agregan métricas entre semillas.
+# ---------------------------------------------------------------------------
+
+
+def parse_seeds_arg(spec: str | None) -> list[int] | None:
+    """Traduce el argumento CLI ``--seeds`` a una selección de semillas.
+
+    - ``None`` / ``""`` / ``"all"`` -> ``None`` (autodescubrir todas las
+      presentes en el layout, resuelto luego por :func:`resolve_seed_csvs`).
+    - lista separada por comas (o espacios), p.ej. ``"1,2,3"`` -> ``[1, 2, 3]``
+      (ordenada y sin duplicados).
+    """
+    if spec is None:
+        return None
+    s = spec.strip().lower()
+    if s == "" or s == "all":
+        return None
+    seeds: list[int] = []
+    for tok in spec.replace(" ", ",").split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        seeds.append(int(tok))
+    return sorted(set(seeds))
+
+
+def discover_seeds(value_dir: str) -> list[tuple[int, str]]:
+    """Escanea ``value_dir/seed<S>/output.csv`` y devuelve ``[(seed, csv), ...]``
+    ordenado por seed ascendente. Sólo cuenta los que realmente tienen el CSV."""
+    found: list[tuple[int, str]] = []
+    for path in glob.glob(os.path.join(value_dir, "seed*", "output.csv")):
+        d = os.path.basename(os.path.dirname(path))
+        m = re.match(r"^seed(\d+)$", d)
+        if not m:
+            continue
+        found.append((int(m.group(1)), path))
+    found.sort(key=lambda t: t[0])
+    return found
+
+
+def resolve_seed_csvs(value_dir: str, seeds: list[int] | None) -> list[tuple[int, str]]:
+    """Resuelve las seeds a graficar dentro de un ``value_dir``.
+
+    ``seeds is None`` -> todas las presentes (autodescubrimiento). Si es una
+    lista, se devuelven sólo las pedidas que EXISTEN (las que falten se ignoran
+    silenciosamente acá; el caller es responsable de avisar si quiere). Siempre
+    ordenado por seed."""
+    present = dict(discover_seeds(value_dir))
+    if seeds is None:
+        return sorted(present.items())
+    return [(s, present[s]) for s in seeds if s in present]
+
+
+def discover_values(sweep_dir: str) -> list[tuple[int, str]]:
+    """Escanea ``sweep_dir/v<N>/`` y devuelve ``[(N, value_dir), ...]`` ordenado
+    por N ascendente. Sólo incluye los ``v<N>`` que tengan al menos una
+    ``seed<S>/output.csv`` adentro."""
+    found: list[tuple[int, str]] = []
+    for vdir in glob.glob(os.path.join(sweep_dir, "v*")):
+        if not os.path.isdir(vdir):
+            continue
+        m = re.match(r"^v(\d+)$", os.path.basename(vdir))
+        if not m:
+            continue
+        if not discover_seeds(vdir):
+            continue
+        found.append((int(m.group(1)), vdir))
+    found.sort(key=lambda t: t[0])
+    return found
+
+
+def mean_std(values: list[float]) -> tuple[float, float | None]:
+    """Estadística cross-seed de una lista de valores (uno por semilla):
+    ``(media, desvío estándar muestral ddof=1)``. Con <2 valores el desvío es
+    ``None`` (no hay dispersión estimable -> el caller omite la barra de error).
+    Lista vacía -> ``(nan, None)``."""
+    vals = list(values)
+    if not vals:
+        return (float("nan"), None)
+    m = mean(vals)
+    sd = stdev(vals) if len(vals) >= 2 else None
+    return (m, sd)
+
+
+def align_population_curves(
+    curves: list[tuple[list[float], list[int]]],
+) -> tuple[list[float], list[list[float]], int]:
+    """Alinea curvas de conteo (población vs. tiempo) de varias realizaciones a
+    la grilla temporal COMÚN, para poder promediarlas entre semillas.
+
+    Método (explicitado también por stdout en los scripts): todas las corridas
+    de un mismo punto del barrido comparten la misma ``dt_out`` ⇒ la misma
+    grilla de ``tout``. Si una corrida termina antes (menos frames), su curva es
+    un PREFIJO de la más larga y se rellena con **0** hasta el horizonte común
+    (la zona observada queda vacía cuando la corrida ya terminó). Se *asserta*
+    que las grillas coinciden en su parte común (tolerancia 1e-6); si no,
+    aborta con AssertionError en vez de promediar peras con manzanas.
+
+    Devuelve ``(times_ref, matrix, n)`` donde ``times_ref`` es la grilla de
+    referencia (la más larga), ``matrix[s][j]`` el conteo de la semilla ``s`` en
+    el índice temporal ``j`` (padded con 0), y ``n`` la cantidad de semillas.
+    """
+    curves = [c for c in curves if c[0]]
+    if not curves:
+        return ([], [], 0)
+    ref_times = max((t for t, _ in curves), key=len)
+    L = len(ref_times)
+    matrix: list[list[float]] = []
+    for times, counts in curves:
+        k = len(times)
+        for i in range(k):
+            assert abs(times[i] - ref_times[i]) < 1e-6, (
+                f"grillas temporales desalineadas en i={i}: "
+                f"{times[i]} != {ref_times[i]} (¿dt_out distinto entre seeds?)"
+            )
+        matrix.append([float(v) for v in counts] + [0.0] * (L - k))
+    return (list(ref_times), matrix, len(matrix))
+
+
+def column_mean_std(matrix: list[list[float]]) -> tuple[list[float], list[float] | None]:
+    """Media y desvío muestral (ddof=1) por columna (por instante temporal) de
+    una matriz ``[seed][j]`` ya alineada. El desvío es ``None`` si hay <2 filas
+    (una sola semilla -> banda no estimable)."""
+    if not matrix:
+        return ([], None)
+    n = len(matrix)
+    L = len(matrix[0])
+    means = [mean([matrix[s][j] for s in range(n)]) for j in range(L)]
+    if n < 2:
+        return (means, None)
+    stds = [stdev([matrix[s][j] for s in range(n)]) for j in range(L)]
+    return (means, stds)
 
 
 def _print_summary(csv_path: str) -> None:

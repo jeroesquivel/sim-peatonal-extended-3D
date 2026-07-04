@@ -114,9 +114,17 @@ public final class App {
         OperationalModel om = CpmOperationalModel.fromGeometry(geometry, true);
 
         // El dt efectivo lo acota el OM: usamos min(dt del escenario, dt que el
-        // modelo considera estable para este profile). Así el escenario no fuerza
-        // un paso que el OM (p. ej. CPM, por su radio de contacto) no banca.
-        double dt = Math.min(params.dt(), om.recommendedDt(profile));
+        // modelo considera estable para el profile MÁS RÁPIDO del escenario (el
+        // default, o el de una zona con max_velocity mayor — D22). Así el
+        // escenario no fuerza un paso que el CPM, por su radio de contacto, no banca.
+        AgentProfile fastest = profile;
+        for (GeneratorZone zone : generators) {
+            AgentProfile zp = zoneProfile(zone.params(), profile);
+            if (zp != null && zp.vd() > fastest.vd()) {
+                fastest = zp;
+            }
+        }
+        double dt = Math.min(params.dt(), om.recommendedDt(fastest));
         if (dt < params.dt()) {
             System.out.printf("[simped] dt acotado por el OM: escenario=%s -> efectivo=%.4f%n",
                     params.dt(), dt);
@@ -207,7 +215,8 @@ public final class App {
 
             PedestrianGenerator base = new ConfigurablePedestrianGenerator(
                     zone.blockName(), activeTime, inactiveTime, List.of(zone.spawnArea()),
-                    flowRate, mode, zonePlans, existingAgentsSupplier, zone.z());
+                    flowRate, mode, zonePlans, existingAgentsSupplier, zone.z(),
+                    zoneProfile(gp, profile));
             zoneGenerators.add(
                     new WiredPedestrianGenerator(base, assembler, agentRegistry, idSource));
         }
@@ -224,6 +233,24 @@ public final class App {
         }
 
         System.out.println("[simped] simulación terminada.");
+    }
+
+    /**
+     * Perfil físico de la zona (D22): si el generador declara {@code max_velocity}
+     * (Formato B) y difiere del default, sus agentes nacen con un perfil igual al
+     * default pero con {@code vd = ve = max_velocity}. Permite p. ej. el "modo
+     * crisis" del sub-escenario Evacuación (vd de emergencia) sin tocar el resto.
+     * Devuelve {@code null} si la zona no declara velocidad propia (usa el default).
+     */
+    private static AgentProfile zoneProfile(GeneratorRawParams gp, AgentProfile base) {
+        if (gp.maxVelocity().isEmpty()) {
+            return null;
+        }
+        double v = gp.maxVelocity().getAsDouble();
+        if (v <= 0.0 || Math.abs(v - base.vd()) < 1e-9) {
+            return null;
+        }
+        return new AgentProfile(v, base.tau(), base.rmin(), base.rmax(), base.beta(), v);
     }
 
     /**

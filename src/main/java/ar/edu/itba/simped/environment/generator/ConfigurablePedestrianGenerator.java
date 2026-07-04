@@ -1,5 +1,6 @@
 package ar.edu.itba.simped.environment.generator;
 
+import ar.edu.itba.simped.core.AgentProfile;
 import ar.edu.itba.simped.core.AgentState;
 import ar.edu.itba.simped.core.BehaviorState;
 import ar.edu.itba.simped.core.PlanTemplate;
@@ -125,6 +126,14 @@ public final class ConfigurablePedestrianGenerator implements PlanAwarePedestria
     /** Mapa agentId → planTemplate asignado, para uso del wiring externo (G9 → assembler). */
     private final Map<Integer, PlanTemplate> agentPlanMap = new HashMap<>();
 
+    /**
+     * Perfil físico con el que nacen los agentes de este generador, o
+     * {@code null} para dejar que el assembler asigne el default (D22: permite
+     * p. ej. el perfil "crisis" con vd mayor en el sub-escenario Evacuación,
+     * derivado del {@code max_velocity} del Formato B).
+     */
+    private final AgentProfile profileOverride;
+
     private final Random rng;
 
     // ── Constructor ──────────────────────────────────────────────────────────
@@ -151,6 +160,29 @@ public final class ConfigurablePedestrianGenerator implements PlanAwarePedestria
             Supplier<List<AgentState>> existingAgentsSupplier,
             double spawnZ
     ) {
+        this(generatorId, activeTime, inactiveTime, spawnZones, flowRatePerMinPerDoor,
+                mode, planTemplates, existingAgentsSupplier, spawnZ, null);
+    }
+
+    /**
+     * Variante con perfil físico propio: los agentes de este generador nacen
+     * con {@code profileOverride} en lugar del default del assembler (D22).
+     *
+     * @param profileOverride perfil de los agentes de esta zona, o {@code null}
+     *                        para usar el default.
+     */
+    public ConfigurablePedestrianGenerator(
+            String generatorId,
+            double activeTime,
+            double inactiveTime,
+            List<Rectangle> spawnZones,
+            double flowRatePerMinPerDoor,
+            GenerationMode mode,
+            List<PlanTemplate> planTemplates,
+            Supplier<List<AgentState>> existingAgentsSupplier,
+            double spawnZ,
+            AgentProfile profileOverride
+    ) {
         if (spawnZones == null || spawnZones.isEmpty())
             throw new IllegalArgumentException("spawnZones must be non-empty");
         if (planTemplates == null || planTemplates.isEmpty())
@@ -175,6 +207,7 @@ public final class ConfigurablePedestrianGenerator implements PlanAwarePedestria
         this.planTemplates          = List.copyOf(planTemplates);
         this.existingAgentsSupplier = existingAgentsSupplier;
         this.spawnZ                 = spawnZ;
+        this.profileOverride        = profileOverride;
 
         int n = this.spawnZones.size();
         this.effectiveFlowRatePerDoor    = new double[n];
@@ -466,6 +499,9 @@ public final class ConfigurablePedestrianGenerator implements PlanAwarePedestria
         st.setZ(spawnZ);
         st.setRadius(AGENT_RADIUS);
         st.setState(BehaviorState.IDLE);
+        if (profileOverride != null) {
+            st.setProfile(profileOverride);
+        }
         agentPlanMap.put(id, planTemplate);
         return new SimpleAgent(st);
     }

@@ -979,3 +979,77 @@ P1=15**. La exclusión es lo que da el ruteo bueno; el reach chico es lo que evi
 GraphBuilder.java` (pasa `geometry.stairs()` al reducer); `environment/graph/NavigationGraph.java`
 (`STAIR_FOOT_REACH` 1.5→0.15 a-lo-largo-del-eje + helper `alongAxisDistFromNear`); `agent/om/
 CpmOperationalModel.java` (sólo doc del `setZ`; física idéntica). Sin cambios de `core`, builder ni viz.
+
+## D22 — Modo crisis en Evacuación: perfil físico por generador (`max_velocity` honrado)
+
+- **Fecha:** 2026-07-04
+- **Estado:** vigente
+- **Paso del plan:** Fase 2 (auditoría vs wiki) — hallazgo del verificador código-vs-enunciado
+
+**Contexto.** El enunciado afirma que "el simulador ya cuenta con un modo para representar el
+comportamiento de agentes en situación de crisis", pero la verificación adversarial mostró que
+**no existía**: `App` asignaba a TODOS los agentes de TODOS los escenarios el mismo perfil
+hardcodeado (`CpmParameters.baglietoParisiSet1()`, vd=1.55), y el `max_velocity` que el builder
+escribía en el Formato B se parseaba (`GeneratorRawParams.maxVelocity`) pero **nunca se consumía**
+(código muerto): la Evacuación corría con física idéntica al baseline.
+
+**Decisión.** Perfil físico **por generador**, derivado del `max_velocity` del Formato B:
+1. `App.zoneProfile(gp, base)`: si la zona declara `max_velocity` > 0 y ≠ vd del default, se crea un
+   `AgentProfile` igual al default pero con `vd = ve = max_velocity`. Si no, `null` (default).
+2. `ConfigurablePedestrianGenerator` acepta un `profileOverride` opcional (constructor nuevo; el
+   viejo delega con `null`) y lo setea en el `AgentState` al nacer. `AgentAssembler.wireAgent` ya
+   respetaba el perfil pre-seteado (solo aplica el default si `profile == null` — el hook estaba
+   documentado y sin usar).
+3. El `dt` efectivo se acota con el perfil **más rápido** del escenario
+   (`om.recommendedDt(fastest)`), no solo el default: con vd=2.0 el dt baja a 0.0375 s.
+4. `build_escuela.py`: **evacuación → `max_velocity: 2.0`** (vd de emergencia, "modo crisis");
+   baseline e ingreso → `1.55` (el vd del perfil default, para no cambiar lo ya validado — antes
+   decían 1.4 pero era código muerto).
+
+**Verificado.** Corrida de evacuación N=120 seed 1: velocidad mediana/p90 en el plano = **2.00 m/s**
+exactos, 119/120 evacuados, t_prom 63.1 s, t_max 137.8 s. Suite completa: **143 tests, 0 fallos**
+(2 tests nuevos del override en `ConfigurablePedestrianGeneratorTest`).
+
+**Alternativas descartadas.** (a) No hacer nada y documentar "evacuación = caminata normal" en el
+informe — dejaba el requisito del enunciado incumplido y el `max_velocity` muerto/engañoso.
+(b) Un flag global `-Dsimped.crisis` — menos expresivo que el knob por zona que el Formato B ya
+tenía; el per-generador además arregla la inconsistencia del código muerto.
+
+**Impacto.** Los resultados del sub-escenario Evacuación cambian (t_evac más cortos, más congestión
+en puertas); los barridos se re-corrieron completos con la física nueva. Baseline e Ingreso quedan
+iguales (1.55 ≡ default efectivo previo). El Formato A no declara `max_velocity` (OptionalDouble
+vacío) ⇒ sin cambios.
+
+## D23 — Semilla global propagada a TODOS los streams aleatorios (`Seeds.mixOr`)
+
+- **Fecha:** 2026-07-04
+- **Estado:** vigente
+- **Paso del plan:** Fase 2 (auditoría vs wiki) — hallazgo del verificador código-vs-enunciado
+
+**Contexto.** `-Dsimped.seed` (D del barrido reproducible) solo alimentaba 2 streams vía
+`Seeds.rng(salt)`: el generador de peatones y la aleatorización de hops del navgraph. El resto
+usaba **constantes fijas** que ignoraban la semilla global: `ServersWiring` (`new Random(0)` para
+tiempos de servicio), `ServersModule` (softmax assigner con `new Random(0)`), y los RNGs de
+selección de `AgentAssembler` (`selectionRng`/`dwellRng`/`groupedLocationSeed`, sembrados por
+constantes + agentId + hashes). Consecuencia: entre réplicas del barrido cada agente elegía **la
+misma salida** (`exit_selection`), el **mismo aula** del grupo y los **mismos tiempos de
+servicio/dwell** — las "5 realizaciones" eran menos independientes de lo que aparentaban.
+
+**Decisión.** Nuevo `Seeds.mixOr(fallback, salt)`: si `simped.seed` está seteada devuelve
+`seed ^ salt.hashCode()` (el stream varía por réplica); si no, devuelve el **fallback = la
+constante histórica** (comportamiento idéntico al de siempre para tests y corridas sueltas).
+Aplicado en: `ServersWiring` (service-time sampler y softmax assigner, ahora por el constructor
+completo de `ServersModule` replicando los defaults del de conveniencia) y `AgentAssembler`
+(XOR del mix en los seeds de `selectionRng`, `dwellRng` y `groupedLocationSeed` — XOR con 0 es
+identidad, así que sin semilla global nada cambia).
+
+**Verificado.** Suite completa **143 tests, 0 fallos** sin tocar ningún test existente (el fallback
+preserva las secuencias históricas). Con `simped.seed` distinta, las selecciones de salida/aula y
+los tiempos de servicio ahora difieren entre réplicas.
+
+**Alternativas descartadas.** Reemplazar las constantes por `Seeds.rng(salt)` directo — rompía el
+determinismo por defecto (sin `simped.seed` devolvía `Random` sin sembrar) y cambiaba resultados de
+tests que dependen de las secuencias históricas.
+
+**Impacto.** Las réplicas del barrido son realizaciones genuinamente más independientes (spawn +
+ruteo + salida + aula + servicio + dwell varían todos con la semilla). Barridos re-corridos.
