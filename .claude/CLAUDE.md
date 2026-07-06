@@ -324,9 +324,18 @@ decisiones es [`DECISIONES.md`](./DECISIONES.md) (**D1–D23**); la auditoría c
 - **Wiki actualizada**: `SDS_Obsidian/wiki/tps/TP_FINAL.md` reescrita al enunciado real (3D), con
   índice y log al día.
 
-**Pendiente (ver PLAN_ENTREGA Fase 2):** presentación oral Beamer (Task 11, reglas duras de la
-cátedra: animación → serie → escalar, embebidas, sin índice, citas inline) y empaquetado del código
+**Pendiente (ver PLAN_ENTREGA Fase 2):** presentación oral Beamer (Task 11) y empaquetado del código
 a entregar (Task 12, solo motor). Opcional: más puntos + log-log (Task 13).
+
+**Task 11 — avance (2026-07-06):** mockup completo en `presentacion/` (mecanismo dual de TP5:
+`SdS_TPFinal_2026Q1G05_Presentacion.tex` = entregable con póster+link, `tpfinal_presentable.tex` =
+oral con MP4 embebidos vía media9; ambos PDFs compilan, 25 páginas). 4 animaciones renderizadas de
+corridas reales (`presentacion/videos/anim_{evac_n40,evac_n120,ingreso_t1,ingreso_t10}.{mp4,png}`).
+Estructura verificada contra `lecciones_correcciones.md` (animación→serie→escalar por estudio, sin
+índice, citas inline, ≤2 animaciones/estudio) y números verificados contra `informe.tex` (0 errores).
+**Falta (usuario):** subir los 4 MP4 a YouTube y pegar los links en los macros `\videolink...`,
+ensayar ~13 min (18 frames de contenido; candidatos a recorte: las 2 "huella espacial" y el
+complementario Nmax). Ver `presentacion/README.md`.
 
 ---
 

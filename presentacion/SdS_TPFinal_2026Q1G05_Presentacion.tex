@@ -1,0 +1,563 @@
+% =============================================================================
+%  SIMULACIÓN DE SISTEMAS - TP FINAL
+%  Grupo 05 - Sebastián Caules, Andrés Cortese, Tomás J. Esquivel
+%  Ampliación a 3D de un simulador peatonal: multiplanta y escaleras.
+%  Escenario: Escuela (2 plantas). Estudios: Evacuación e Ingreso.
+%
+%  Este archivo es el CUERPO compartido por las DOS versiones que pide la cátedra
+%  ("la presentación oral debe correr la animación; el PDF entregable lleva
+%  fotograma + link a YouTube"):
+%
+%    * ENTREGABLE  -> compilar ESTE archivo directo:
+%        pdflatex SdS_TPFinal_2026Q1G05_Presentacion.tex
+%      Sin video embebido: fotograma clickeable + link a YouTube debajo. Liviano.
+%
+%    * PRESENTABLE -> compilar tpfinal_presentable.tex (define \PRESENTABLEMODE e
+%      incluye este cuerpo):
+%        pdflatex tpfinal_presentable.tex
+%      Video .mp4 EMBEBIDO (reproduce inline en Adobe Acrobat/Reader), SIN links.
+%
+%  Una sola fuente de contenido -> las dos versiones nunca se desincronizan.
+%  Links de YouTube en los macros \videolink... (si se vacían, la versión
+%  entregable muestra "[link pendiente]").
+%
+%  Los videos/posters salen de corridas reales de los barridos (seed 1):
+%    videos/anim_evac_n40.mp4     out/sweeps/evacuacion/v40/seed1
+%    videos/anim_evac_n120.mp4    out/sweeps/evacuacion/v120/seed1
+%    videos/anim_ingreso_t1.mp4   out/sweeps/ingreso/v1/seed1
+%    videos/anim_ingreso_t10.mp4  out/sweeps/ingreso/v10/seed1
+% =============================================================================
+
+\documentclass[10pt,aspectratio=169,t]{beamer}
+\usetheme{Warsaw}
+\usecolortheme{default}
+\setbeamertemplate{navigation symbols}{}
+\useoutertheme{miniframes}
+
+% Footer: solo número de diapositiva a la derecha (igual a TP2/TP3/TP4/TP5)
+\setbeamertemplate{footline}{%
+    \hfill{\footnotesize\insertframenumber\,/\,\inserttotalframenumber}\hspace{8pt}\vspace{4pt}%
+}
+\setbeamercolor{frametitle}{bg=blue!70!black, fg=white}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-noshorthands]{babel}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{bm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc}
+\usepackage{hyperref}
+\usepackage{media9}   % video embebido en el PDF (reproduce inline en Adobe Acrobat/Reader)
+\usepackage[absolute,overlay]{textpos}  % anclaje absoluto de la cita (ver \fuente)
+\graphicspath{{figuras/}}
+\sisetup{output-decimal-marker={.}}
+
+% --- Cita inline en una esquina de la diapositiva (los lineamientos piden las
+%     referencias inline, no en una diapositiva final).
+%     OJO: NO usar tikz [remember picture, overlay] con current page: el outer
+%     theme miniframes rompe ese anclaje. textpos ancla a la página y queda fijo
+%     abajo-izquierda también en frames [c] centrados. ---
+\newcommand{\fuente}[1]{%
+  \begin{textblock*}{0.9\paperwidth}[0,1](0.5cm,\dimexpr\paperheight-0.35cm\relax)
+    {\tiny\color{gray} #1}%
+  \end{textblock*}}
+
+% --- Links de YouTube/Vimeo a las animaciones. Editar cuando estén subidos. ---
+%     Si quedan vacíos, la slide muestra "[link pendiente]" en lugar del URL.
+\newcommand{\videolinkEvacBaja}{}     % evacuación, capacidad baja  (N = 40)
+\newcommand{\videolinkEvacAlta}{}     % evacuación, capacidad alta  (N = 120)
+\newcommand{\videolinkIngresoUno}{}   % ingreso, ventana de 1 minuto
+\newcommand{\videolinkIngresoDiez}{}  % ingreso, ventana de 10 minutos
+
+% --- Modo de compilación (lo fija el driver tpfinal_presentable.tex vía
+%     \PRESENTABLEMODE; por defecto, compilando este archivo solo, es ENTREGABLE):
+%       ENTREGABLE  : \embedvideofalse + \showlinktrue  -> fotograma clickeable
+%                     (abre el link) + URL de YouTube visible debajo. Liviano.
+%       PRESENTABLE : \embedvideotrue  + \showlinkfalse -> .mp4 embebido (media9,
+%                     reproduce inline en Acrobat), SIN URL en pantalla. ---
+\newif\ifembedvideo
+\newif\ifshowlink
+\ifdefined\PRESENTABLEMODE
+  \embedvideotrue\showlinkfalse
+\else
+  \embedvideofalse\showlinktrue
+\fi
+
+% --- \simvideo: fotograma/video de una animación.
+%     #1 = nombre base en videos/ (espera #1.png y, si embebe, #1.mp4)
+%     #2 = link de YouTube (un macro; si está vacío -> "[link pendiente]")
+%     Los posters de la vista 3D son ~cuadrados (1056x1044, ancho = 1,0115 alto)
+%     -> el tamaño se fija por ALTO (\vidH) y el ancho sale del aspecto. ---
+\newlength{\vidH}
+\setlength{\vidH}{0.56\textheight}
+\makeatletter
+\newcommand{\simvideo}[2]{%
+  \begin{minipage}{\linewidth}\centering
+    \edef\sv@link{#2}% expandimos el link (puede ser un macro vacío)
+    \ifembedvideo
+      \includemedia[
+        activate=onclick,
+        width=1.0115\vidH,height=\vidH,
+        addresource=videos/#1.mp4,
+        flashvars={source=videos/#1.mp4}
+      ]{\includegraphics[width=1.0115\vidH,height=\vidH]{videos/#1.png}}{videos/#1.mp4}%
+    \else
+      \ifx\sv@link\@empty
+        \includegraphics[height=\vidH,keepaspectratio]{videos/#1.png}%
+      \else
+        \href{#2}{\includegraphics[height=\vidH,keepaspectratio]{videos/#1.png}}%
+      \fi
+    \fi
+    \ifshowlink
+      \\[2pt]
+      {\scriptsize\ttfamily
+        \ifx\sv@link\@empty \textcolor{red!60!black}{[link pendiente]}%
+        \else \url{#2}\fi}%
+    \fi
+  \end{minipage}%
+}
+\makeatother
+
+% --- Metadatos ---
+\title[TP Final -- Simulador peatonal 3D]{Ampliación a 3D de un simulador peatonal:\\
+  multiplanta y escaleras}
+\subtitle{Trabajo Práctico Final}
+\author[Caules, Cortese, Esquivel]{Sebastián Caules \and Andrés Cortese \and Tomás J. Esquivel}
+\institute[ITBA]{Instituto Tecnológico de Buenos Aires \\ 72.25 -- Simulación de Sistemas -- Grupo 05}
+\date{10 de julio de 2026}
+
+\begin{document}
+
+% =============================================================================
+% PORTADA
+% =============================================================================
+{
+  \setbeamertemplate{headline}{}
+  \setbeamertemplate{footline}{}
+  \begin{frame}[plain]
+    \titlepage
+  \end{frame}
+}
+
+% =============================================================================
+\section{Ampliación 3D}
+
+\begin{frame}[plain,c]
+  \centering
+  {\usebeamercolor[fg]{structure}\fontsize{40}{48}\selectfont La ampliación a 3D\\[2pt]
+   \large plantas conectadas por escaleras\par}
+\end{frame}
+
+\begin{frame}[c]{El objetivo: mapas con más de una planta}
+  \begin{columns}[T]
+    \begin{column}{0.62\textwidth}
+      \begin{itemize}
+        \item Punto de partida: un simulador peatonal \textbf{2D} (posición y velocidad
+          $(x,y)$ usadas en cascada por todos los módulos).
+        \item Objetivo: soportar \textbf{plantas} conectadas por \textbf{escaleras}, y que
+          la vecindad, la física, el grafo de navegación y la salida respeten la
+          coordenada $z$.
+        \item La $z$ representa la \textbf{planta} del agente, y su altura intermedia
+          mientras recorre una escalera.
+        \item Enfoque \textbf{híbrido}: posiciones y velocidades pasan a 3D, pero la
+          dinámica sigue siendo \textbf{planar} en cada planta; la $z$ se interpola por
+          el avance sobre la escalera (no hay $v_z$).
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.36\textwidth}
+      \centering
+      \begin{tikzpicture}[scale=0.72]
+        % planta baja
+        \draw[thick,fill=blue!8] (0,0) -- (4,0) -- (5.4,1.1) -- (1.4,1.1) -- cycle;
+        % planta alta
+        \draw[thick,fill=blue!8] (0,2.6) -- (4,2.6) -- (5.4,3.7) -- (1.4,3.7) -- cycle;
+        % escalera
+        \draw[thick,fill=orange!45] (3.6,0.55) -- (4.3,0.55) -- (5.1,3.15) -- (4.4,3.15) -- cycle;
+        % agentes
+        \fill[red!70!black] (1.3,0.5) circle (0.10);
+        \fill[red!70!black] (2.4,0.75) circle (0.10);
+        \fill[green!55!black] (2.0,3.1) circle (0.10);
+        \fill[green!55!black] (3.0,3.35) circle (0.10);
+        \fill[red!70!black] (4.45,1.6) circle (0.10);
+        \node[font=\scriptsize,anchor=east] at (-0.05,0.55) {$z=0$};
+        \node[font=\scriptsize,anchor=east] at (-0.05,3.15) {$z=3$};
+        \node[font=\scriptsize,anchor=west,orange!60!black] at (5.15,1.9) {escalera};
+      \end{tikzpicture}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[c]{Modelo físico: partículas contráctiles (CPM)}
+  \begin{itemize}
+    \item Cada agente es una partícula de \textbf{radio variable}: se contrae al radio
+      mínimo ante un contacto y se re-expande mientras avanza libre.
+    \item La velocidad deseada apunta al objetivo, con maniobras angulares de
+      \textbf{evitación anisotrópica} (variante A-CPM).
+    \item La dinámica ocurre en el \textbf{plano de la planta} del agente; contra las
+      paredes sólo interactúa con las de su propia planta.
+    \item Sobre la \textbf{escalera}: velocidad reducida por un factor configurable, y la
+      $z$ se interpola con el avance a lo largo del tramo.
+  \end{itemize}
+  \fuente{Refs.: Baglietto \& Parisi, Phys.\ Rev.\ E \textbf{83}, 056117 (2011) ·
+    Martin \& Parisi (2024), A-CPM}
+\end{frame}
+
+\begin{frame}[c]{Qué cambió en cada módulo}
+  \small
+  \begin{center}
+  \begin{tabular}{@{}p{3.0cm}p{9.6cm}@{}}
+    \toprule
+    \textbf{Módulo} & \textbf{Qué cambió en 3D} \\
+    \midrule
+    Tipos base & Posición y velocidad 3D; la $z$ no es grado de libertad dinámico. \\
+    Geometría & Cada pared, salida, aula y generador lleva su planta; nuevo tipo
+      \emph{escalera}. \\
+    Grafo de navegación & Una malla por planta, unida por \textbf{aristas de escalera};
+      A* con heurística euclídea 3D; visibilidad por planta. \\
+    Vecinos (CIM) & Una grilla por planta + índice ``puente'' en la escalera; se preservan
+      paredes y sus vértices como vecinos. \\
+    Física (CPM) & Planar en la planta actual; en la escalera, velocidad reducida e
+      interpolación de $z$. \\
+    Salida y animación & Columna $z$ en la salida; animación 2D por planta + vista 3D a
+      45\textdegree{} apilada. \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+\end{frame}
+
+\begin{frame}[c]{Escaleras \emph{switchback} con descanso}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \begin{itemize}
+        \item Tramo en \textbf{L}: dos tramos paralelos unidos por un \textbf{descanso} a
+          media altura; se modela como dos escaleras encadenadas $\Rightarrow$ reutiliza
+          grafo, vecinos y física sin reescribir el núcleo.
+        \item \textbf{Barandas} y el perímetro del descanso confinan al agente dentro de
+          la huella.
+        \item En tramos anchos, un \emph{bias} lateral separa \textbf{carriles} de subida
+          y bajada (contraflujo).
+        \item En la vista 3D la escalera se dibuja como un perfil de \textbf{peldaños}.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \centering
+      \begin{tikzpicture}[scale=0.85]
+        % huella total (vista en planta)
+        \draw[very thick] (0,0) rectangle (5.2,2.6);
+        % descanso a la izquierda
+        \draw[thick] (1.5,0) -- (1.5,2.6);
+        \fill[blue!10] (0,0) rectangle (1.5,2.6);
+        % separación entre tramos
+        \draw[thick] (1.5,1.3) -- (5.2,1.3);
+        \fill[orange!25] (1.5,0) rectangle (5.2,1.3);
+        \fill[orange!45] (1.5,1.3) rectangle (5.2,2.6);
+        \draw[thick] (1.5,1.3) -- (5.2,1.3);
+        \draw[thick] (1.5,0) -- (1.5,2.6);
+        % flechas de recorrido
+        \draw[-{Latex[length=2.5mm]},very thick,blue!60!black] (4.8,0.65) -- (2.0,0.65);
+        \draw[-{Latex[length=2.5mm]},very thick,blue!60!black]
+          (1.1,0.65) .. controls (0.45,0.65) and (0.45,1.95) .. (1.1,1.95);
+        \draw[-{Latex[length=2.5mm]},very thick,blue!60!black] (2.0,1.95) -- (4.8,1.95);
+        % etiquetas
+        \node[font=\scriptsize,anchor=west] at (5.25,0.65) {pie ($z=0$)};
+        \node[font=\scriptsize,anchor=west] at (5.25,1.95) {tope ($z=\SI{3}{m}$)};
+        \node[font=\scriptsize,align=center] at (0.75,-0.35) {descanso\\($z=\SI{1.5}{m}$)};
+      \end{tikzpicture}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% =============================================================================
+\section{Escuela}
+
+\begin{frame}[plain,c]
+  \centering
+  {\usebeamercolor[fg]{structure}\fontsize{40}{48}\selectfont Escenario: Escuela\par}
+\end{frame}
+
+\begin{frame}[c]{El mapa: recreo y edificio de dos plantas}
+  \begin{columns}[T]
+    \begin{column}{0.46\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,height=0.72\textheight,keepaspectratio]{escuela_3d.png}\\
+      {\footnotesize Vista 3D apilada: planta baja, descanso y planta alta.}
+    \end{column}
+    \begin{column}{0.52\textwidth}
+      \begin{itemize}
+        \item Mapa de \SI{60}{m}$\times$\SI{60}{m} con dos zonas.
+        \item \textbf{Recreo} (una planta): patio abierto, \textbf{kiosco} con cola y
+          salida propia.
+        \item \textbf{Edificio} (dos plantas): pasillo central, \textbf{16 aulas}
+          (4 por lado y por planta) y \textbf{dos escaleras switchback} en las puntas.
+        \item La planta alta \textbf{no tiene salida}: se evacúa bajando por las
+          escaleras.
+        \item Las aulas son recintos colectivos con una sesión de clase y timbre
+          único de salida.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[c]{Parámetros de las corridas}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{Agentes (perfil CPM)}
+      \begin{itemize}
+        \item Radios: $r_{\min}=\SI{0.15}{m}$, $r_{\max}\sim\mathcal{U}(0.30,0.32)\,$m;
+          $\tau=\SI{0.5}{s}$; $\beta=0.9$.
+        \item Caminata normal: $v_d=\SI{1.55}{m/s}$.
+        \item \textbf{Modo crisis} (evacuación): $v_d=v_e=\SI{2.0}{m/s}$, como en los
+          modelos de escape.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \textbf{Simulación}
+      \begin{itemize}
+        \item $\Delta t$ acotado por el perfil más rápido: \SI{0.048}{s}
+          (\SI{0.0375}{s} en evacuación); $\Delta t_{\text{out}}=\SI{0.2}{s}$.
+        \item Escalera: ancho \SI{2.6}{m}; velocidad efectiva en el tramo
+          $\approx\SI{0.59}{m/s}$.
+        \item \textbf{5 realizaciones} por punto (semillas 1--5): se reporta
+          media $\pm\,\sigma$, con barras de error.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \fuente{Perfil: Baglietto \& Parisi (2011) · Velocidad de crisis: Helbing, Farkas
+    \& Vicsek, Nature \textbf{407} (2000)}
+\end{frame}
+
+% =============================================================================
+\section{Evacuación}
+
+\begin{frame}[plain,c]
+  \centering
+  {\usebeamercolor[fg]{structure}\fontsize{40}{48}\selectfont Estudio 1: Evacuación\par}
+\end{frame}
+
+\begin{frame}[c]{Qué medimos en la evacuación}
+  \begin{itemize}
+    \item Los $N$ alumnos comienzan \textbf{dentro de las aulas} de ambas plantas y
+      evacúan en \textbf{modo crisis} hacia las dos salidas; los de la planta alta bajan
+      por las escaleras.
+    \item \textbf{Input}: la capacidad total $N \in \{40, 80, 120\}$.
+    \item \textbf{Observable}: la distribución de los tiempos de evacuación
+      \begin{equation*}
+        t_{\text{evac},i} \;=\; t_{\text{salida},i} - t_{\text{inicio},i}.
+      \end{equation*}
+    \item \textbf{Escalares}: $t_{\text{evac}}$ \textbf{promedio} y \textbf{máximo} en
+      función de $N$.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[c]{La evacuación desde ambas plantas}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \centering
+      \simvideo{anim_evac_n40}{\videolinkEvacBaja}\\[1pt]
+      {\footnotesize Capacidad baja: $N=40$.}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \centering
+      \simvideo{anim_evac_n120}{\videolinkEvacAlta}\\[1pt]
+      {\footnotesize Capacidad alta: $N=120$.}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[c]{La distribución de tiempos de evacuación es bimodal}
+  \centering
+  \includegraphics[width=0.95\linewidth]{evac_hist.png}\\[4pt]
+  \begin{itemize}
+    \item El lóbulo rápido es la \textbf{planta baja}; el lento, la \textbf{planta alta},
+      que debe bajar la escalera a velocidad reducida.
+    \item Al crecer $N$, el lóbulo lento se desplaza a tiempos mayores y produce la cola
+      larga.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[c]{El tiempo de evacuación crece con la capacidad}
+  \begin{columns}[T]
+    \begin{column}{0.56\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,height=0.74\textheight,keepaspectratio]{evac_scalar.png}
+    \end{column}
+    \begin{column}{0.42\textwidth}
+      \textbf{Observaciones}
+      \begin{itemize}
+        \item Al triplicar la capacidad, el promedio pasa de $48.2\pm0.6$ a
+          $66.7\pm3.6$~s y el máximo de $93.5\pm3.2$ a $151.2\pm10.8$~s.
+        \item La dispersión entre realizaciones crece con $N$: más congestión, más
+          sensibilidad a la realización.
+        \item Barras de error: $\pm\,\sigma$ entre las 5 realizaciones; en los puntos
+          de menor dispersión la barra queda dentro del marcador.
+        \item Queda $\approx 1.4$ agente por corrida sin evacuar (livelock de jamba de
+          puerta, límite conocido del modelo de fuerzas).
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[c]{La huella espacial de la evacuación}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{heatmap_densidad_evac.png}\\[2pt]
+      {\footnotesize Densidad de ocupación: el pasillo central y las escaleras
+        concentran el flujo.}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{heatmap_tevac.png}\\[2pt]
+      {\footnotesize $t_{\text{evac}}$ medio según el origen: la planta alta evacúa
+        mucho más lento (baja por escalera).}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% =============================================================================
+\section{Ingreso}
+
+\begin{frame}[plain,c]
+  \centering
+  {\usebeamercolor[fg]{structure}\fontsize{40}{48}\selectfont Estudio 2: Ingreso\par}
+\end{frame}
+
+\begin{frame}[c]{Qué medimos en el ingreso}
+  \begin{itemize}
+    \item Los $N_{\max}=120$ alumnos llegan repartidos uniformemente en una
+      \textbf{ventana} $T_a \in \{1, 5, 10\}$~min y van a sus aulas; los que entran por
+      el recreo pasan antes por el \textbf{kiosco}.
+    \item \textbf{Input}: la ventana $T_a$, equivalente a un caudal
+      $Q = N_{\max}/T_a \in \{120, 24, 12\}$ agentes/min.
+    \item \textbf{Observable}: la población en la zona del kiosco
+      \begin{equation*}
+        n_{\text{zona}}(t) \;=\; \bigl|\{\, i : (x_i(t), y_i(t)) \in R \,\}\bigr|,
+        \qquad R = \text{frente del kiosco (planta baja)}.
+      \end{equation*}
+    \item \textbf{Escalares}: ocupación \textbf{máxima} y \textbf{promedio} de la zona.
+    \item ¿Por qué el kiosco? El pie de la escalera no congestiona (switchback ancha,
+      dos escaleras, sólo la mitad sube): la congestión real se forma \textbf{frente al
+      kiosco}.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[c]{La congestión se forma frente al kiosco}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \centering
+      \simvideo{anim_ingreso_t1}{\videolinkIngresoUno}\\[1pt]
+      {\footnotesize Ventana corta: $T_a=\SI{1}{min}$ ($Q=120$ ag/min).}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \centering
+      \simvideo{anim_ingreso_t10}{\videolinkIngresoDiez}\\[1pt]
+      {\footnotesize Ventana larga: $T_a=\SI{10}{min}$ ($Q=12$ ag/min).}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[c]{Población en el kiosco durante el ingreso}
+  \begin{columns}[T]
+    \begin{column}{0.62\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,height=0.76\textheight,keepaspectratio]{ingreso_poblacion.png}
+    \end{column}
+    \begin{column}{0.36\textwidth}
+      \textbf{Observaciones}
+      \begin{itemize}
+        \item Ventana corta: pico \textbf{agudo y temprano}; ventana larga: meseta
+          \textbf{baja y extendida}.
+        \item El mismo total de personas, distinta intensidad de aglomeración.
+        \item La banda sombreada es $\pm\,\sigma$ entre las 5 realizaciones.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[c]{Repartir la llegada descongestiona la zona}
+  \begin{columns}[T]
+    \begin{column}{0.56\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,height=0.74\textheight,keepaspectratio]{ingreso_scalar.png}
+    \end{column}
+    \begin{column}{0.42\textwidth}
+      \textbf{Observaciones}
+      \begin{itemize}
+        \item Concentrar la llegada en \SI{1}{min} produce un pico de $53.4\pm1.8$
+          agentes; repartirla en \SI{10}{min} lo baja a $5.0\pm0.7$
+          ($\sim$11$\times$ menos).
+        \item Con la ventana de \SI{1}{min} la cola del kiosco no llega a drenarse en
+          la corrida: el servidor queda \textbf{saturado}.
+        \item Donde las barras de error no se distinguen, son menores que el marcador.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[c]{Estudio complementario: la congestión crece con la cantidad de alumnos}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,height=0.62\textheight,keepaspectratio]{ingreso_nmax_poblacion.png}
+    \end{column}
+    \begin{column}{0.44\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,height=0.62\textheight,keepaspectratio]{ingreso_nmax_scalar.png}
+    \end{column}
+  \end{columns}
+  \vspace{2pt}
+  \begin{itemize}
+    \item A ventana fija, se varía la cantidad total $N_{\max}\in\{60,120,180\}$.
+    \item Triplicar $N_{\max}$ multiplica el pico $\sim$11$\times$ ($4.8 \to 51.6$): la
+      ocupación crece \textbf{más que proporcionalmente} en el rango explorado.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[c]{La huella espacial del ingreso}
+  \centering
+  \includegraphics[width=0.8\linewidth,height=0.68\textheight,keepaspectratio]{heatmap_densidad_ingreso.png}\\[3pt]
+  {\footnotesize Densidad de ocupación durante el ingreso: la cola del kiosco es el punto
+    caliente; pasillos y entradas quedan mucho más tenues.}
+\end{frame}
+
+% =============================================================================
+\section{Conclusiones}
+
+\begin{frame}[plain,c]
+  \centering
+  {\usebeamercolor[fg]{structure}\fontsize{40}{48}\selectfont Conclusiones\par}
+\end{frame}
+
+\begin{frame}[c]{Conclusiones}
+  \begin{itemize}
+    \item El simulador quedó ampliado a 3D \textbf{de punta a punta}: agentes que
+      recorren escaleras a velocidad reducida, vecinos y física por planta, grafo de
+      navegación 3D, y animación por planta más vista 3D apilada.
+    \item La escalera \textbf{switchback} con descanso, confinamiento y carriles de
+      contraflujo da un comportamiento coherente.
+    \item El \textbf{tiempo de evacuación crece con la capacidad}, y su distribución es
+      \textbf{bimodal}: la planta baja sale rápido y la planta alta forma el lóbulo
+      lento.
+    \item La \textbf{ocupación del kiosco crece al acortar la ventana de llegada} y, a
+      ventana fija, crece más que proporcionalmente con la cantidad de alumnos, en el
+      rango explorado.
+    \item Límite conocido: $\approx 1.4$ agente por corrida no evacúa por el livelock
+      de jamba de puerta del modelo de fuerzas (mitigado, no eliminado).
+  \end{itemize}
+\end{frame}
+
+% =============================================================================
+{
+  \setbeamertemplate{footline}{}
+  \begin{frame}[plain,c]
+    \centering
+    {\fontsize{44}{52}\selectfont Muchas gracias\par}
+  \end{frame}
+}
+
+\end{document}
