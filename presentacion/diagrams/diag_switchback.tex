@@ -1,0 +1,134 @@
+% Escalera switchback con descanso -- vista axonometrica 3D
+% Contrato visual compartido: x={(0.90cm,-0.30cm)}, y={(0.90cm,0.30cm)}, z={(0cm,0.95cm)}
+% Libs: arrows.meta, calc, 3d
+\begin{tikzpicture}[
+    x={(0.90cm,-0.30cm)}, y={(0.90cm,0.30cm)}, z={(0cm,0.95cm)},
+    line join=round, line cap=round, scale=0.90,
+    treadC/.style={fill=orange!40},
+    riserC/.style={fill=orange!60},
+    sideC/.style ={fill=orange!52},
+    edgeO/.style ={draw=orange!75!black},
+    slabT/.style ={fill=blue!8},
+    slabS/.style ={fill=blue!20},
+    edgeB/.style ={draw=blue!60!black}]
+
+  % ---- parametros geometricos (unidades de mundo; z esquematica) ----
+  \def\dyy{0.40}\def\dzz{0.30}
+  \def\xaA{1.10}\def\xbA{2.05}   % tramo A (frente):  z 0    -> 1.8   (rotulo 1.5 m)
+  \def\xaB{0.00}\def\xbB{0.95}   % tramo B (fondo) :  z 1.8  -> 3.6   (rotulo 3 m)
+  \def\YY{2.40}                  % 6*dy : borde del descanso
+  \def\Zm{1.8}\def\Zt{3.6}       % z mundo del descanso / tope
+  \def\Dl{0.68}                  % profundidad del descanso
+  \def\tl{0.20}                  % espesor de losa
+  \def\Tf{0.44}                  % espesor del tramo B (soffit)
+
+  % =========================================================
+  % 1. Piso de referencia (z=0) bajo el pie del tramo A
+  % =========================================================
+  \fill[blue!6,draw=blue!35,thin]
+    (0.95,-0.78,0) -- (2.28,-0.78,0) -- (2.28,0.12,0) -- (0.95,0.12,0) -- cycle;
+
+  % =========================================================
+  % 2. Descanso (losa a z=Zm) -- al fondo
+  % =========================================================
+  \fill[slabS,edgeB,thick] (0.0,\YY,{\Zm-\tl}) -- (\xbA,\YY,{\Zm-\tl})
+        -- (\xbA,\YY,\Zm) -- (0.0,\YY,\Zm) -- cycle;                  % cara -y
+  \fill[slabS,edgeB,thick] (\xbA,\YY,{\Zm-\tl}) -- (\xbA,{\YY+\Dl},{\Zm-\tl})
+        -- (\xbA,{\YY+\Dl},\Zm) -- (\xbA,\YY,\Zm) -- cycle;          % cara +x
+  \fill[slabT,edgeB,thick] (0.0,\YY,\Zm) -- (\xbA,\YY,\Zm)
+        -- (\xbA,{\YY+\Dl},\Zm) -- (0.0,{\YY+\Dl},\Zm) -- cycle;     % cara superior
+
+  % =========================================================
+  % 3. Tramo B (fondo): losa escalonada inclinada z=Zm -> Zt
+  %    (riseres miran +y = ocultos; se ve cara +x interna + huellas)
+  % =========================================================
+  \fill[sideC,edgeO,thick]
+    (\xbB,\YY,\Zm)
+    foreach \j in {0,...,5} {
+       -- (\xbB,{\YY-\j*\dyy},{\Zm+(\j+1)*\dzz})
+       -- (\xbB,{\YY-(\j+1)*\dyy},{\Zm+(\j+1)*\dzz})
+    }
+    -- (\xbB,0,{\Zt-\Tf}) -- (\xbB,\YY,{\Zm-\Tf}) -- cycle;
+  % huellas del tramo B (k=1 lejos -> k=6 cerca)
+  \foreach \k in {1,...,6}{
+    \pgfmathsetmacro{\zt}{\Zm+\k*\dzz}
+    \pgfmathsetmacro{\yfr}{\YY-\k*\dyy}
+    \pgfmathsetmacro{\ybk}{\YY-(\k-1)*\dyy}
+    \fill[treadC,edgeO,thick] (\xaB,\yfr,\zt) -- (\xbB,\yfr,\zt)
+          -- (\xbB,\ybk,\zt) -- (\xaB,\ybk,\zt) -- cycle;
+  }
+  \fill[riserC,edgeO,thick] (\xaB,0,{\Zt-\Tf}) -- (\xbB,0,{\Zt-\Tf})
+        -- (\xbB,0,\Zt) -- (\xaB,0,\Zt) -- cycle;                    % tapa -y del tope
+  % perfil escalonado en negrita sobre la cara +x visible (para que se lean peldanos)
+  \draw[orange!75!black,thick]
+    (\xbB,\YY,\Zm)
+    foreach \j in {0,...,5} {
+       -- (\xbB,{\YY-\j*\dyy},{\Zm+(\j+1)*\dzz})
+       -- (\xbB,{\YY-(\j+1)*\dyy},{\Zm+(\j+1)*\dzz})
+    };
+
+  % =========================================================
+  % 4. Tramo A (frente): escalera solida z=0 -> Zm
+  % =========================================================
+  \fill[sideC,edgeO,thick]
+    (\xbA,0,0)
+    foreach \i in {0,...,5} {
+       -- (\xbA,{\i*\dyy},{(\i+1)*\dzz})
+       -- (\xbA,{(\i+1)*\dyy},{(\i+1)*\dzz})
+    }
+    -- (\xbA,\YY,0) -- cycle;
+  \foreach \i in {5,4,3,2,1,0}{
+    \pgfmathsetmacro{\yf}{\i*\dyy}
+    \pgfmathsetmacro{\yb}{(\i+1)*\dyy}
+    \pgfmathsetmacro{\zl}{\i*\dzz}
+    \pgfmathsetmacro{\zh}{(\i+1)*\dzz}
+    \fill[riserC,edgeO,thick] (\xaA,\yf,\zl) -- (\xbA,\yf,\zl)
+          -- (\xbA,\yf,\zh) -- (\xaA,\yf,\zh) -- cycle;              % contrahuella
+    \fill[treadC,edgeO,thick] (\xaA,\yf,\zh) -- (\xbA,\yf,\zh)
+          -- (\xbA,\yb,\zh) -- (\xaA,\yb,\zh) -- cycle;              % huella
+  }
+
+  % =========================================================
+  % 5. Fragmento de losa de la planta alta (z=Zt) en el tope
+  % =========================================================
+  \def\ua{-0.15}\def\ub{1.05}\def\va{-0.68}\def\vb{0.00}
+  \fill[slabS,edgeB,thick] (\ua,\va,{\Zt-\tl}) -- (\ub,\va,{\Zt-\tl})
+        -- (\ub,\va,\Zt) -- (\ua,\va,\Zt) -- cycle;                  % cara -y
+  \fill[slabS,edgeB,thick] (\ub,\va,{\Zt-\tl}) -- (\ub,\vb,{\Zt-\tl})
+        -- (\ub,\vb,\Zt) -- (\ub,\va,\Zt) -- cycle;                  % cara +x
+  \fill[slabT,edgeB,thick] (\ua,\va,\Zt) -- (\ub,\va,\Zt)
+        -- (\ub,\vb,\Zt) -- (\ua,\vb,\Zt) -- cycle;                  % cara superior
+
+  % =========================================================
+  % 6. Barandas: omitidas a proposito. En esta proyeccion, todo
+  %    pasamanos paralelo a la pendiente proyecta casi paralelo a la
+  %    flecha de recorrido (<2 mm de holgura en pagina) y se enreda
+  %    con ella; el confinamiento por barandas ya lo dice el texto
+  %    de la slide.
+  % =========================================================
+
+  % =========================================================
+  % 7. Flecha de recorrido (elemento narrativo) -- muy gruesa
+  % =========================================================
+  \def\xcA{1.575}\def\xcB{0.475}
+  \draw[-{Latex[length=2.8mm,width=2.8mm]},line width=1.7pt,blue!60!black]
+     (\xcA,0.12,0.35) -- (\xcA,1.70,1.36);                          % sube tramo A (waypoint)
+  \draw[-{Latex[length=2.8mm,width=2.8mm]},line width=1.7pt,blue!60!black]  % remate A + giro 180 + tramo B
+     (\xcA,1.86,1.46) -- (\xcA,{\YY+0.06},{\Zm+0.05})
+     .. controls (\xcA,{\YY+\Dl+0.12},{\Zm+0.05}) and (\xcB,{\YY+\Dl+0.12},{\Zm+0.05}) ..
+     (\xcB,{\YY+0.06},{\Zm+0.05}) -- (\xcB,0.15,{\Zt+0.08});
+
+  % =========================================================
+  % 8. Etiquetas con lineas lider (scriptsize)
+  % =========================================================
+  % pie -- debajo del pie del tramo A
+  \draw[gray,thin] (1.58,0.06,0.05) -- (1.30,-0.60,0.05);
+  \node[anchor=north,font=\scriptsize] at (1.30,-0.60,0.05) {pie ($z=0$)};
+  % descanso -- abajo-derecha, hacia el borde frontal-derecho del descanso
+  \draw[gray,thin] (\xbA,{\YY+0.10},\Zm) -- (2.05,{\YY-0.30},0.62);
+  \node[anchor=west,font=\scriptsize] at (2.05,{\YY-0.30},0.62) {descanso ($z=\SI{1.5}{m}$)};
+  % tope -- arriba del tope del tramo B
+  \draw[gray,thin] (0.35,0.05,\Zt) -- (0.62,-0.42,{\Zt+0.32});
+  \node[anchor=south,font=\scriptsize] at (0.62,-0.42,{\Zt+0.32}) {tope ($z=\SI{3}{m}$)};
+
+\end{tikzpicture}

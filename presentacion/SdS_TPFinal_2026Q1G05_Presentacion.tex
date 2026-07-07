@@ -171,23 +171,7 @@
     \end{column}
     \begin{column}{0.36\textwidth}
       \centering
-      \begin{tikzpicture}[scale=0.72]
-        % planta baja
-        \draw[thick,fill=blue!8] (0,0) -- (4,0) -- (5.4,1.1) -- (1.4,1.1) -- cycle;
-        % planta alta
-        \draw[thick,fill=blue!8] (0,2.6) -- (4,2.6) -- (5.4,3.7) -- (1.4,3.7) -- cycle;
-        % escalera
-        \draw[thick,fill=orange!45] (3.6,0.55) -- (4.3,0.55) -- (5.1,3.15) -- (4.4,3.15) -- cycle;
-        % agentes
-        \fill[red!70!black] (1.3,0.5) circle (0.10);
-        \fill[red!70!black] (2.4,0.75) circle (0.10);
-        \fill[green!55!black] (2.0,3.1) circle (0.10);
-        \fill[green!55!black] (3.0,3.35) circle (0.10);
-        \fill[red!70!black] (4.45,1.6) circle (0.10);
-        \node[font=\scriptsize,anchor=east] at (-0.05,0.55) {$z=0$};
-        \node[font=\scriptsize,anchor=east] at (-0.05,3.15) {$z=3$};
-        \node[font=\scriptsize,anchor=west,orange!60!black] at (5.15,1.9) {escalera};
-      \end{tikzpicture}
+      \resizebox{\linewidth}{!}{\input{diagrams/diag_plantas.tex}}
     \end{column}
   \end{columns}
 \end{frame}
@@ -246,28 +230,7 @@
     \end{column}
     \begin{column}{0.46\textwidth}
       \centering
-      \begin{tikzpicture}[scale=0.85]
-        % huella total (vista en planta)
-        \draw[very thick] (0,0) rectangle (5.2,2.6);
-        % descanso a la izquierda
-        \draw[thick] (1.5,0) -- (1.5,2.6);
-        \fill[blue!10] (0,0) rectangle (1.5,2.6);
-        % separación entre tramos
-        \draw[thick] (1.5,1.3) -- (5.2,1.3);
-        \fill[orange!25] (1.5,0) rectangle (5.2,1.3);
-        \fill[orange!45] (1.5,1.3) rectangle (5.2,2.6);
-        \draw[thick] (1.5,1.3) -- (5.2,1.3);
-        \draw[thick] (1.5,0) -- (1.5,2.6);
-        % flechas de recorrido
-        \draw[-{Latex[length=2.5mm]},very thick,blue!60!black] (4.8,0.65) -- (2.0,0.65);
-        \draw[-{Latex[length=2.5mm]},very thick,blue!60!black]
-          (1.1,0.65) .. controls (0.45,0.65) and (0.45,1.95) .. (1.1,1.95);
-        \draw[-{Latex[length=2.5mm]},very thick,blue!60!black] (2.0,1.95) -- (4.8,1.95);
-        % etiquetas
-        \node[font=\scriptsize,anchor=west] at (5.25,0.65) {pie ($z=0$)};
-        \node[font=\scriptsize,anchor=west] at (5.25,1.95) {tope ($z=\SI{3}{m}$)};
-        \node[font=\scriptsize,align=center] at (0.75,-0.35) {descanso\\($z=\SI{1.5}{m}$)};
-      \end{tikzpicture}
+      \resizebox{\linewidth}{!}{\input{diagrams/diag_switchback.tex}}
     \end{column}
   \end{columns}
 \end{frame}

@@ -26,6 +26,9 @@ con máximo 2 animaciones por estudio, sin índice y sin slide de referencias (c
 ## Assets
 
 - `figuras/` — copiadas de `informe/figuras/` (misma fuente de verdad que el informe).
+- `diagrams/` — diagramas TikZ axonométricos (plantas apiladas y escalera switchback), `\input`
+  desde el cuerpo. Comparten proyección (`x={(0.90,-0.30)}, y={(0.90,0.30)}, z={(0,0.95)}`) y
+  paleta; solo requieren las tikzlibs ya cargadas en el preámbulo.
 - `videos/anim_*.{png,mp4}` — pósters y animaciones renderizados de **corridas reales** de los
   barridos (seed 1). Regenerarlos:
 
