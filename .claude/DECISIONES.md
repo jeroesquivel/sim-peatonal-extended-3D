@@ -1064,3 +1064,67 @@ tests que dependen de las secuencias históricas.
 
 **Impacto.** Las réplicas del barrido son realizaciones genuinamente más independientes (spawn +
 ruteo + salida + aula + servicio + dwell varían todos con la semilla). Barridos re-corridos.
+
+## D24 — Fix del deadlock de boca de escalera: descansos mallados + gate lateral + boca ancha
+
+- **Fecha:** 2026-07-08
+- **Estado:** vigente
+- **Paso del plan:** post-entrega — hallazgo del stress-testing (`REPORTE_STRESS.md`)
+
+**Contexto.** El stress-test encontró que con N≥300 la evacuación se clava: un arco estable de
+agentes en la boca superior de UNA escalera detiene el flujo por completo (N=500: 168 atrapados,
+flujo 0 durante 600 s; N=800: 280). El diagnóstico con el grafo real (probe + Dijkstra) encontró
+tres defectos encadenados:
+1. **`keepMainFreeComponent` descartaba los descansos**: en el plano z=1.5 la región libre más
+   grande era la franja *fantasma* entre los dos descansos (artefacto del bounding box), así que
+   la malla del descanso real se tiraba y los extremos de escalera se encadenaban por el vacío
+   con aristas de 49–54 m (wormhole cruzando el edificio a z=1.5).
+2. Con ese grafo, el único camino de bajada pasaba por una sola escalera (A* sin alternativas:
+   `assemblePlanar` construye un **árbol**) → toda la planta alta se embudaba en una boca.
+3. En la boca, el cambio de hop al extremo lejano ignoraba el **desvío lateral** (solo medía la
+   distancia a lo largo del eje, D21): en multitud, los agentes que cruzaban la línea de la boca
+   corridos lateralmente recibían "bajá" y quedaban clavados contra las barandas desde afuera,
+   taponando el hueco; el resto convergía isotrópicamente al **nodo puntual** del tope → arco.
+
+**Decisión (tres cambios coordinados).**
+- **`GridNodeReducer`**: (a) `keepMainFreeComponent` conserva las componentes **ancladas por un
+  extremo de escalera de esa planta** (radio 1 m) y descarta el resto; sin anclas, la mayor como
+  siempre (escenarios sin escaleras: comportamiento idéntico). (b) `walkLine` y la cobertura
+  exigen **misma componente transitable** (`gridComp`): verse a través del vacío no es caminar ni
+  cubrir. (c) Fase de densificación en `assemblePlanar`: tras el árbol se agregan las aristas
+  visibles restantes que no crucen y respeten el espacio personal (rutas alternativas).
+- **`GraphBuilder`**: pasa los tramos con su semiancho (`NavigationGraph.StairSpan`) al grafo.
+- **`NavigationGraph`**: el flip del hop al extremo lejano exige además **desvío perpendicular ≤
+  semiancho** (gate lateral); y mientras el agente se acerca, el hop es su **proyección sobre el
+  segmento de la boca** (± semiancho − 0.35 m de hombro), no el nodo puntual — cada agente apunta
+  a su propio punto de entrada, como en una puerta ancha. Sin `StairSpan` (mocks/CSV) cae en el
+  comportamiento histórico (tolerancia `STAIR_AXIS_TOL`).
+
+**Cuarto cambio (misma D):** pase de **espaciado máximo de nodos** (`enforceNodeSpacing`,
+`MAX_NODE_SPACING=12 m`, tras la fusión): la cobertura por visibilidad dejaba áreas abiertas
+grandes (el recreo, 30×60 m) con 2–3 nodos y las distancias del grafo quedaban distorsionadas en
+decenas de metros (otro motor del embudo). Solo se agregan celdas con línea de vista a un nodo
+existente (sin eso, un bolsillo alcanzable por una rendija generaba nodos aislados que capturaban
+la consulta de nodo-más-cercano).
+
+**Verificado.** Suite **143 tests, 0 fallos**. Stress re-corrido (seed 1): **N=500 evacúa 499/500
+y el edificio queda vacío a t=310 s (antes: 168 atrapados para siempre)**; N=300: 298/300, 0
+problemas; N=120 mejora t_evac medio 63.1→50.3 s (−20%) y máx 137.8→90.6 s (−34%), dist mínima
+entre pares 0.306 m (antes 0.228) y reparto de escaleras 12 N / 44 S (antes ~todo por una). N=800
+(6.7× el máximo del informe): ya no se clava (flujo nunca nulo, 631/800) pero se arrastra — límite
+conocido. El grafo de la Escuela ya no tiene aristas fantasma a z=1.5, los descansos tienen nodos
+propios y el recreo pasó de 3 a ~15 nodos.
+
+**Alternativas descartadas.** (i) Conectar los extremos del mismo descanso "a mano" con una arista
+directa — atravesaba el murete divisor del descanso; el camino real lo aporta la malla del descanso.
+(ii) Desempate aleatorio del A* para repartir escaleras — no ataca la causa (los caminos no eran
+alternativas comparables sino un único camino defectuoso) y rompe reproducibilidad.
+(iii) Ruteo sensible a congestión — cambio de arquitectura mayor, innecesario una vez que la boca
+no se clava.
+
+**Impacto / deuda.** El ruteo sigue prefiriendo mayormente UNA escalera (la sur, por la métrica
+del árbol por planta y la salida EDIFICIO al sureste): ya no produce deadlock pero la otra escalera
+queda subusada — balancear la carga (malla más densa en áreas abiertas o costo por congestión)
+queda como mejora opcional. **Los observables del informe cambian** (t_evac baja ~13% en N=120):
+si se adopta este fix para la entrega hay que re-correr los barridos de 5 semillas y actualizar
+informe + presentación.

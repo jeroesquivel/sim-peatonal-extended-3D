@@ -1,13 +1,16 @@
 package ar.edu.itba.simped.environment.graph;
 
 import ar.edu.itba.simped.core.Vec2;
+import ar.edu.itba.simped.core.Vec3;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Construcción del grafo de navegación por reducción sobre una grilla (Tarea 1 — grupo navegación).
@@ -79,6 +82,15 @@ final class GridNodeReducer {
 
     private final boolean[] free;       // celda transitable
     private final double[] clearance;   // distancia al obstáculo más cercano (pared o servidor)
+    /**
+     * Componente conexa (4-vecindad de celdas libres) de cada celda; -1 si no es libre.
+     * D24: dos puntos "se ven" a través de un hueco pero pueden no compartir piso
+     * caminable (p. ej. los dos descansos de escaleras distintas a la misma z, con el
+     * vacío entre medio). Cobertura, aristas y puentes exigen misma componente.
+     */
+    private int[] gridComp;
+    /** z de la planta que se está mallando (todas las paredes comparten z). */
+    private final double floorZ;
 
     private int[] targetCells;
     private long[][] covers;            // covers[g] = bitset de targets visibles desde g
@@ -93,6 +105,7 @@ final class GridNodeReducer {
         this.servers = servers;
         this.stairsExclude = stairsExclude;
         this.spacing = spacing;
+        this.floorZ = walls.isEmpty() ? Double.NaN : walls.get(0).z();
 
         double bMinX = Double.MAX_VALUE, bMinY = Double.MAX_VALUE;
         double bMaxX = -Double.MAX_VALUE, bMaxY = -Double.MAX_VALUE;
@@ -169,6 +182,14 @@ final class GridNodeReducer {
         //    que cubría sigue cubierta por otro nodo) y el grafo sigue conexo. Los servidores no se tocan.
         coverageMerge(selected, types, inSelected);
 
+        // 6.5) Espaciado máximo (D24): la cobertura por visibilidad deja áreas abiertas
+        //     grandes (p. ej. el patio del recreo, 30×60 m) con 2–3 nodos, y el grafo de
+        //     aristas resultante distorsiona las distancias en decenas de metros (el A*
+        //     elegía escalera por esos artefactos). Se agregan nodos hasta que ninguna
+        //     celda libre quede a más de MAX_NODE_SPACING (distancia de grilla) de un nodo.
+        //     Va DESPUÉS de la fusión (la fusión los eliminaría: no aportan cobertura).
+        enforceNodeSpacing(selected, types, inSelected);
+
         // 7) Aristas: árbol planar (sin cruces, respetando el espacio personal a obstáculos).
         return assemblePlanar(selected, types);
     }
@@ -203,16 +224,28 @@ final class GridNodeReducer {
     }
 
     /**
-     * Se queda solo con la mayor región transitable conexa (celdas libres unidas por 4-vecindad):
-     * descarta "bolsillos" exteriores de plantas cóncavas. Las salas unidas por puertas (huecos
-     * entre paredes) quedan en la misma región; los servidores no parten celdas (no son libres).
+     * Filtra las regiones transitables conexas (celdas libres unidas por 4-vecindad).
+     *
+     * <p>Si alguna región está <b>anclada por una escalera</b> (contiene el pie o el tope de un
+     * tramo de esta planta), se conservan exactamente las regiones ancladas: son piso real que
+     * el ruteo multiplanta necesita (p. ej. los descansos de un switchback a z intermedia). El
+     * resto — en particular la franja "fantasma" que aparece entre dos descansos porque el
+     * bounding box de la planta los abarca a ambos — se descarta (D24: antes esa franja era la
+     * región más grande de z=1.5, se quedaba con la malla, y los descansos reales quedaban sin
+     * nodos; los extremos de escalera se encadenaban entonces por el vacío y el A* embudaba
+     * toda la planta alta por una sola escalera).</p>
+     *
+     * <p>Sin anclas (plantas comunes o escenarios sin escaleras) se conserva la mayor región,
+     * como siempre: descarta "bolsillos" exteriores de plantas cóncavas. Deja {@link #gridComp}
+     * con el id de región de cada celda superviviente.</p>
      */
     private void keepMainFreeComponent() {
         int[] comp = new int[nx * ny];
         java.util.Arrays.fill(comp, -1);
-        int bestId = -1, bestSize = 0, id = 0;
+        List<Integer> sizes = new ArrayList<>();
         for (int start = 0; start < nx * ny; start++) {
             if (!free[start] || comp[start] != -1) continue;
+            int id = sizes.size();
             int size = 0;
             Deque<Integer> q = new ArrayDeque<>();
             q.add(start);
@@ -228,13 +261,129 @@ final class GridNodeReducer {
                     if (free[h] && comp[h] == -1) { comp[h] = id; q.add(h); }
                 }
             }
-            if (size > bestSize) { bestSize = size; bestId = id; }
-            id++;
+            sizes.add(size);
         }
-        if (bestId < 0) return;
+        this.gridComp = comp;
+        if (sizes.isEmpty()) return;
+
+        Set<Integer> keep = anchoredComponents(comp);
+        if (keep.isEmpty()) {
+            int bestId = 0;
+            for (int id = 1; id < sizes.size(); id++) {
+                if (sizes.get(id) > sizes.get(bestId)) bestId = id;
+            }
+            keep = Set.of(bestId);
+        }
         for (int g = 0; g < nx * ny; g++) {
-            if (free[g] && comp[g] != bestId) free[g] = false;
+            if (free[g] && !keep.contains(comp[g])) {
+                free[g] = false;
+                comp[g] = -1;
+            }
         }
+    }
+
+    /** Radio de búsqueda de la celda libre más cercana a un extremo de escalera (ancla). */
+    private static final double STAIR_ANCHOR_RADIUS = 1.0;
+
+    /**
+     * D24: distancia de grilla máxima admisible de una celda libre al nodo más cercano.
+     * Acota la distorsión métrica del grafo en áreas abiertas grandes (la cobertura por
+     * visibilidad sola puede dejar 2–3 nodos para un patio de 30×60 m).
+     */
+    private static final double MAX_NODE_SPACING = 12.0;
+
+    /**
+     * Agrega nodos de área hasta que ninguna celda libre quede a más de
+     * {@link #MAX_NODE_SPACING} (distancia de grilla, multi-source BFS desde los nodos)
+     * del nodo más cercano. Cada iteración agrega la celda más lejana y repite.
+     */
+    private void enforceNodeSpacing(List<Integer> selected, List<Integer> types, boolean[] inSelected) {
+        int guard = 0;
+        while (guard++ < 128) {
+            double[] dist = new double[nx * ny];
+            java.util.Arrays.fill(dist, Double.MAX_VALUE);
+            Deque<Integer> q = new ArrayDeque<>();
+            for (int g : selected) {
+                dist[g] = 0.0;
+                q.add(g);
+            }
+            while (!q.isEmpty()) {
+                int g = q.poll();
+                int i = gi(g), j = gj(g);
+                int[][] nb = {{i + 1, j}, {i - 1, j}, {i, j + 1}, {i, j - 1}};
+                for (int[] c : nb) {
+                    if (c[0] < 0 || c[0] >= nx || c[1] < 0 || c[1] >= ny) continue;
+                    int h = idx(c[0], c[1]);
+                    if (!free[h] || dist[h] != Double.MAX_VALUE) continue;
+                    dist[h] = dist[g] + spacing;
+                    q.add(h);
+                }
+            }
+            // Celda más lejana que además tenga línea de vista a algún nodo existente
+            // (sin eso quedaría AISLADA en el grafo de aristas — p. ej. un bolsillo
+            // detrás de las aulas alcanzable por una rendija — y un nodo aislado puede
+            // capturar la consulta de "nodo más cercano" de un agente y dejarlo sin
+            // camino). Las celdas sin enlace posible se saltean.
+            int far = -1;
+            double farD = MAX_NODE_SPACING;
+            for (int g = 0; g < nx * ny; g++) {
+                if (!free[g] || dist[g] == Double.MAX_VALUE || dist[g] <= farD) continue;
+                boolean linkable = false;
+                for (int s : selected) {
+                    if (walkLine(pos(g), pos(s))) { linkable = true; break; }
+                }
+                if (linkable) { farD = dist[g]; far = g; }
+            }
+            if (far < 0) return;
+            selected.add(far);
+            types.add(TYPE_AREA);
+            inSelected[far] = true;
+        }
+    }
+
+    /**
+     * Ids de las regiones que contienen una celda libre a menos de {@link #STAIR_ANCHOR_RADIUS}
+     * del pie o el tope de un tramo de escalera de ESTA planta (misma z). Vacío si la planta no
+     * tiene extremos de escalera.
+     */
+    private Set<Integer> anchoredComponents(int[] comp) {
+        Set<Integer> out = new HashSet<>();
+        int r = Math.max(1, (int) Math.ceil(STAIR_ANCHOR_RADIUS / spacing));
+        for (ar.edu.itba.simped.core.Stairs s : stairsExclude) {
+            for (Vec3 e : new Vec3[]{s.foot(), s.top()}) {
+                if (Math.abs(e.z() - floorZ) > 1e-6) continue;
+                int ei = (int) Math.floor((e.x() - minX) / spacing);
+                int ej = (int) Math.floor((e.y() - minY) / spacing);
+                int bestG = -1;
+                double bestD = Double.MAX_VALUE;
+                for (int i = Math.max(0, ei - r); i <= Math.min(nx - 1, ei + r); i++) {
+                    for (int j = Math.max(0, ej - r); j <= Math.min(ny - 1, ej + r); j++) {
+                        int g = idx(i, j);
+                        if (!free[g]) continue;
+                        double d = pos(g).distanceTo(new Vec2(e.x(), e.y()));
+                        if (d <= STAIR_ANCHOR_RADIUS && d < bestD) { bestD = d; bestG = g; }
+                    }
+                }
+                if (bestG >= 0) out.add(comp[bestG]);
+            }
+        }
+        return out;
+    }
+
+    /** ¿Las celdas que contienen a {@code a} y {@code b} comparten región transitable? */
+    private boolean sameComp(Vec2 a, Vec2 b) {
+        return compOf(a) >= 0 && compOf(a) == compOf(b);
+    }
+
+    private int compOf(Vec2 p) {
+        int i = Math.min(nx - 1, Math.max(0, (int) Math.floor((p.x() - minX) / spacing)));
+        int j = Math.min(ny - 1, Math.max(0, (int) Math.floor((p.y() - minY) / spacing)));
+        return gridComp[idx(i, j)];
+    }
+
+    /** Ídem {@link #sameComp(Vec2, Vec2)} pero por id de celda. */
+    private boolean sameCompCells(int g, int h) {
+        return gridComp[g] >= 0 && gridComp[g] == gridComp[h];
     }
 
     /**
@@ -290,7 +439,10 @@ final class GridNodeReducer {
             Vec2 pg = pos(g);
             for (int t = 0; t < numTargets; t++) {
                 int tg = targetCells[t];
-                if (tg == g || seesOver(pg, pos(tg))) {
+                // D24: un nodo solo "cubre" celdas de su propia región transitable
+                // (visible a través del vacío no es cubierto: sin esto, el nodo de un
+                // descanso cubría el descanso de la OTRA escalera y lo dejaba sin nodos).
+                if (tg == g || (sameCompCells(g, tg) && seesOver(pg, pos(tg)))) {
                     bits[t >>> 6] |= 1L << (t & 63);
                 }
             }
@@ -799,6 +951,20 @@ final class GridNodeReducer {
             if (find(parent, i) == find(parent, j)) continue;
             addEdge(adj, parent, placed, i, j, e[0]); added[0]++;
         }
+        // 4) Densificación (D24): el árbol de expansión deja UNA sola ruta entre
+        // cada par de puntos, con costos muy distorsionados (zigzag), y el A* no
+        // puede comparar alternativas — en la Escuela toda la planta alta se
+        // embudaba por una única escalera y a N grande la boca se clavaba en un
+        // arco. Se agregan las aristas restantes que no crucen a las ya puestas
+        // y respeten el espacio personal: grafo planar (≤3n−6 aristas) con rutas
+        // alternativas y distancias cercanas a las euclídeas.
+        for (double[] e : cand) {
+            int i = (int) e[1], j = (int) e[2];
+            if (adj.get(i).containsKey(j)) continue;
+            if (crosses(i, j, placed, nodes)) continue;
+            if (segDistToObstacles(nodes.get(i), nodes.get(j)) < PERSONAL_SPACE - EPS) continue;
+            addEdge(adj, parent, placed, i, j, e[0]);
+        }
         return new Result(nodes, adj, types);
     }
 
@@ -886,6 +1052,9 @@ final class GridNodeReducer {
      * y las aristas del grafo sí los tratan como obstáculos.
      */
     private boolean walkLine(Vec2 a, Vec2 b) {
+        // D24: verse no alcanza — hay pares visibles a través de un hueco sin piso
+        // caminable entre medio (descansos de escaleras distintas a la misma z).
+        if (!sameComp(a, b)) return false;
         if (!seesOver(a, b)) return false;
         double segMinX = Math.min(a.x(), b.x()) - EPS;
         double segMaxX = Math.max(a.x(), b.x()) + EPS;

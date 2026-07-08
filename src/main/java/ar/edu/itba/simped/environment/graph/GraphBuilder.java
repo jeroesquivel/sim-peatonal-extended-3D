@@ -93,6 +93,7 @@ public final class GraphBuilder {
             allWalls.addAll(floorWalls);
         }
 
+        List<NavigationGraph.StairSpan> spans = new ArrayList<>();
         for (ar.edu.itba.simped.core.Stairs s : geometry.stairs()) {
             int footIdx = addNode(nodes, adjacency, types, s.foot());
             int topIdx = addNode(nodes, adjacency, types, s.top());
@@ -103,9 +104,11 @@ public final class GraphBuilder {
             connectToFloor(nodes, adjacency, allWalls, nodesByFloor, topIdx);
             // Arista de escalera: costo = largo 3D del tramo inclinado.
             addEdge(adjacency, footIdx, topIdx, s.foot().distanceTo(s.top()));
+            // D24: semiancho del tramo para el gate lateral del hop en la boca.
+            spans.add(new NavigationGraph.StairSpan(s.foot(), s.top(), s.width() / 2.0));
         }
 
-        return new NavigationGraph(nodes, adjacency, allWalls, types);
+        return new NavigationGraph(nodes, adjacency, allWalls, types, spans);
     }
 
     private static long floorKey(double z) {

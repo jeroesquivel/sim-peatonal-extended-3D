@@ -65,16 +65,38 @@ final class NavigationGraph {
     /** Tolerancia planar para considerar que el agente está sobre el eje de una escalera. */
     private static final double STAIR_AXIS_TOL = 3.0;
 
+    /**
+     * Tramo de escalera con su semiancho, para el gate lateral del hop (D24): el
+     * cambio de hop hacia el otro extremo sólo ocurre si el agente está DE FRENTE
+     * al tramo (desvío perpendicular ≤ semiancho), no sólo cerca a lo largo del eje.
+     */
+    record StairSpan(Vec3 a, Vec3 b, double halfWidth) {
+        boolean matches(Vec3 p, Vec3 q) {
+            return (a.equals(p) && b.equals(q)) || (a.equals(q) && b.equals(p));
+        }
+    }
+
+    private final List<StairSpan> stairSpans;
+
     NavigationGraph(List<Vec3> nodes,
                     List<Map<Integer, Double>> adjacency,
                     List<Wall> walls) {
-        this(nodes, adjacency, walls, null);
+        this(nodes, adjacency, walls, null, null);
     }
 
     NavigationGraph(List<Vec3> nodes,
                     List<Map<Integer, Double>> adjacency,
                     List<Wall> walls,
                     List<Integer> nodeTypes) {
+        this(nodes, adjacency, walls, nodeTypes, null);
+    }
+
+    NavigationGraph(List<Vec3> nodes,
+                    List<Map<Integer, Double>> adjacency,
+                    List<Wall> walls,
+                    List<Integer> nodeTypes,
+                    List<StairSpan> stairSpans) {
+        this.stairSpans = stairSpans == null ? List.of() : List.copyOf(stairSpans);
         this.nodes = List.copyOf(nodes);
         this.adjacency = adjacency; // mutable internamente, pero no se expone
         this.walls = List.copyOf(walls);
@@ -257,10 +279,26 @@ final class NavigationGraph {
                 // z engancha desde el nivel del piso, sin el salto 0→0.56 (D21). El
                 // desvío perpendicular se ignora a propósito: el agente puede llegar
                 // al extremo con offset lateral y aun así enganchar suave.
-                if (alongAxisDistFromNear(agent.xy(), cur.xy(), nxt.xy()) <= STAIR_FOOT_REACH) {
+                // D24 (gate lateral): además de estar en la línea de la boca, el
+                // agente debe estar DE FRENTE al tramo (desvío perpendicular ≤
+                // semiancho). Sin esto, en una multitud los agentes que cruzaban la
+                // línea desplazados lateralmente recibían el hop del extremo lejano
+                // y quedaban clavados contra las barandas desde afuera, taponando
+                // la boca (arco del stress-test E300–E800). Fuera del ancho, el hop
+                // sigue siendo el extremo cercano: el agente apunta al centro de la
+                // boca y entra bordeando la punta de la baranda.
+                double lateralTol = lateralTolFor(cur, nxt);
+                if (alongAxisDistFromNear(agent.xy(), cur.xy(), nxt.xy()) <= STAIR_FOOT_REACH
+                        && perpDistFromAxis(agent.xy(), cur.xy(), nxt.xy()) <= lateralTol) {
                     return new FvpOnPath(nxt, i + 1, i + 1);
                 }
-                return new FvpOnPath(cur, i, i);
+                // D24 (boca ancha): mientras el agente se acerca, el hop no es el
+                // nodo puntual del extremo sino SU proyección sobre el segmento de
+                // la boca (perpendicular al eje, largo = ancho del tramo). Con un
+                // punto único, una multitud convergía isotrópicamente y formaba un
+                // arco estable (deadlock del stress-test); con la boca ancha cada
+                // agente apunta a su propio punto de entrada, como en una puerta.
+                return new FvpOnPath(mouthPoint(agent, cur, nxt, lateralTol), i, i);
             }
             if (i + 1 < graphNodeCount) {
                 Vec3 hop = binarySearchFVP(agent, cur, nxt);
@@ -325,6 +363,46 @@ final class NavigationGraph {
         double t = ((p.x() - near.x()) * dx + (p.y() - near.y()) * dy) / len2;
         if (t < 0.0) t = 0.0; // se pasó del extremo cercano hacia afuera del tramo
         return t * Math.sqrt(len2);
+    }
+
+    /**
+     * Punto de entrada personal a la boca del tramo: la proyección del agente sobre el
+     * segmento perpendicular al eje que pasa por {@code cur}, recortada al semiancho
+     * (menos un margen de hombro para no apuntar al filo de la baranda). Conserva la
+     * {@code z} de {@code cur} (la boca está al nivel de la planta).
+     */
+    private static Vec3 mouthPoint(Vec3 agent, Vec3 cur, Vec3 nxt, double halfWidth) {
+        double dx = nxt.x() - cur.x(), dy = nxt.y() - cur.y();
+        double len = Math.hypot(dx, dy);
+        if (len < 1e-9) return cur;
+        // Perpendicular unitaria al eje del tramo.
+        double px = -dy / len, py = dx / len;
+        double s = (agent.x() - cur.x()) * px + (agent.y() - cur.y()) * py;
+        double margin = 0.35; // hombro: no apuntar al filo de la baranda
+        double lim = Math.max(0.0, halfWidth - margin);
+        if (s > lim) s = lim;
+        if (s < -lim) s = -lim;
+        return new Vec3(cur.x() + s * px, cur.y() + s * py, cur.z());
+    }
+
+    /** Componente PERPENDICULAR al eje {@code near→far} de la posición {@code p} (m). */
+    private static double perpDistFromAxis(Vec2 p, Vec2 near, Vec2 far) {
+        double dx = far.x() - near.x(), dy = far.y() - near.y();
+        double len = Math.hypot(dx, dy);
+        if (len < 1e-9) return p.distanceTo(near);
+        return Math.abs((p.x() - near.x()) * dy - (p.y() - near.y()) * dx) / len;
+    }
+
+    /**
+     * Semiancho del tramo de escalera {@code cur↔nxt} para el gate lateral del hop.
+     * Si el grafo no fue construido con los tramos (mocks/CSV), cae en
+     * {@link #STAIR_AXIS_TOL} — el comportamiento histórico (sin gate efectivo).
+     */
+    private double lateralTolFor(Vec3 cur, Vec3 nxt) {
+        for (StairSpan s : stairSpans) {
+            if (s.matches(cur, nxt)) return s.halfWidth();
+        }
+        return STAIR_AXIS_TOL;
     }
 
     private static double distanceToSegmentXy(Vec2 p, Vec2 a, Vec2 b) {
