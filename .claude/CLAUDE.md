@@ -295,10 +295,28 @@ sirven de referencia de cómo se generan los CSV, pero **no forman parte de este
 
 ## Estado del trabajo y pendientes (retomar acá)
 
-**Última sesión: 2026-07-03/04 (auditoría vs wiki de SDS + Fase 2).** La fuente de verdad de las
-decisiones es [`DECISIONES.md`](./DECISIONES.md) (**D1–D23**); la auditoría contra la wiki está en
-[`REVISION_WIKI.md`](./REVISION_WIKI.md) y el plan vigente en [`PLAN_ENTREGA.md`](./PLAN_ENTREGA.md)
-(Fase 2, Tasks 8–14).
+**Última sesión: 2026-07-07 (informe + ppt: cambios del simulador y porqués).** La fuente de verdad
+de las decisiones es [`DECISIONES.md`](./DECISIONES.md) (**D1–D23**); la auditoría contra la wiki
+está en [`REVISION_WIKI.md`](./REVISION_WIKI.md) y el plan vigente en
+[`PLAN_ENTREGA.md`](./PLAN_ENTREGA.md) (Fase 2, Tasks 8–14).
+
+**Hecho (2026-07-07):** informe y presentación ahora explican todos los cambios del simulador y sus
+porqués (pedido del usuario), con verificación adversarial:
+- **Informe §Implementación ampliado** (11→**14 páginas**, 0 errores/refs sin resolver): porqués por
+  módulo con alternativas descartadas (D1–D10), párrafo nuevo **"La integración multiplanta"**
+  (D11/D16/D18: la z perdida en silencio, lección de defaults z=0), párrafo nuevo del **livelock de
+  jamba + contacto a rmin** (D14→D17, con 20.1%→5.5% y 2/30→0/30) y **"Reproducibilidad"** (D23).
+- **Presentación** (25→**26 páginas** ambas versiones, sin overfull): tabla de módulos con columna
+  "Por qué", frame nuevo **"Lo que sólo aparece con dos plantas reales"** (gaps de integración,
+  cruce de arista de escalera, salto de z, livelock→rmin, lección), bullets de híbrido y de semilla.
+  Estructura por estudio intacta (re-verificada contra `lecciones_correcciones.md`).
+- **Corrección verificada con datos** (análisis de los 15 output.csv de evacuación): los ~1.4
+  no-evacuados/corrida (1.4/1.6/1.4 para N=40/80/120) NO están en jambas de aula (0/22 — eso lo
+  arregló D17): 14/22 oscilan en la **boca de la escalera SUR de P1** (contra la baranda, z=3.0) y
+  7/22 en la **jamba del portón norte** de PB; 1/22 (N=120 seed1) es un caso borde del criterio (el
+  último agente en tránsito: todos evacuaron a t≈143 s y el output no escribe cuadros vacíos).
+  Redacción corregida en Resultados+Conclusiones del informe y 2 bullets del ppt (nota en D17).
+- Suite re-verificada: **143 tests, 0 fallos, 0 skipped** (el "0 omitidos" del informe es exacto).
 
 **Hecho (2026-07-03/04):**
 - **Auditoría completa contra la wiki de SDS** (`SDS_Obsidian/`, en particular

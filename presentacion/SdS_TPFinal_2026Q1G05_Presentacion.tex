@@ -165,7 +165,8 @@
         \item La $z$ representa la \textbf{planta} del agente, y su altura intermedia
           mientras recorre una escalera.
         \item Enfoque \textbf{híbrido}: posiciones y velocidades pasan a 3D, pero la
-          dinámica sigue siendo \textbf{planar} en cada planta; la $z$ se interpola por
+          dinámica sigue siendo \textbf{planar} en cada planta (evita reescribir la física
+          planar y que la $z$ se mueva por fuerzas del plano); la $z$ se interpola por
           el avance sobre la escalera (no hay $v_z$).
       \end{itemize}
     \end{column}
@@ -191,24 +192,26 @@
     Martin \& Parisi (2024), A-CPM}
 \end{frame}
 
-\begin{frame}[c]{Qué cambió en cada módulo}
-  \small
+\begin{frame}[c]{Qué cambió en cada módulo, y por qué}
+  \footnotesize
   \begin{center}
-  \begin{tabular}{@{}p{3.0cm}p{9.6cm}@{}}
+  \begin{tabular}{@{}p{2.4cm}p{6.2cm}p{4.0cm}@{}}
     \toprule
-    \textbf{Módulo} & \textbf{Qué cambió en 3D} \\
+    \textbf{Módulo} & \textbf{Qué cambió en 3D} & \textbf{Por qué} \\
     \midrule
-    Tipos base & Posición y velocidad 3D; la $z$ no es grado de libertad dinámico. \\
+    Tipos base & Posición y velocidad 3D; la $z$ no es grado de libertad dinámico.
+      & La física del CPM es planar. \\
     Geometría & Cada pared, salida, aula y generador lleva su planta; nuevo tipo
-      \emph{escalera}. \\
+      \emph{escalera}. & Un muro pertenece a una planta. \\
     Grafo de navegación & Una malla por planta, unida por \textbf{aristas de escalera};
-      A* con heurística euclídea 3D; visibilidad por planta. \\
-    Vecinos (CIM) & Una grilla por planta + índice ``puente'' en la escalera; se preservan
-      paredes y sus vértices como vecinos. \\
+      A* con heurística euclídea 3D; visibilidad por planta.
+      & Una losa tapa la línea de vista entre plantas. \\
+    Vecinos (CIM) & Una grilla por planta + índice ``puente'' en la escalera; paredes y
+      vértices como vecinos. & El enunciado pide vecindad por planta. \\
     Física (CPM) & Planar en la planta actual; en la escalera, velocidad reducida e
-      interpolación de $z$. \\
+      interpolación de $z$. & La dinámica peatonal ocurre en el plano. \\
     Salida y animación & Columna $z$ en la salida; animación 2D por planta + vista 3D a
-      45\textdegree{} apilada. \\
+      45\textdegree{} apilada. & Ubicar al agente en su planta. \\
     \bottomrule
   \end{tabular}
   \end{center}
@@ -233,6 +236,27 @@
       \resizebox{\linewidth}{!}{\input{diagrams/diag_switchback.tex}}
     \end{column}
   \end{columns}
+\end{frame}
+
+\begin{frame}[c]{Lo que sólo aparece con dos plantas reales}
+  \begin{itemize}
+    \item \textbf{Verde en aislamiento, roto en integración}: cada módulo pasaba sus
+      tests, pero el primer escenario real de dos plantas destapó caminos donde la $z$ se
+      perdía \emph{en silencio} (tareas, servers y generadores nacían o apuntaban a
+      $z=0$): nadie subía a la planta alta, y sin un solo \emph{crash}.
+    \item \textbf{El ruteo se quedaba al pie} de la escalera (el tope ``no es visible''
+      desde otra planta) $\Rightarrow$ se cruza explícitamente la \textbf{arista de
+      escalera}.
+    \item \textbf{Salto de $z$ al pie}: se excluyó la huella de la escalera de la grilla
+      del grafo y el cambio de \emph{hop} se hace pegado al extremo, para que la $z$
+      enganche desde el nivel del piso.
+    \item \textbf{Livelock en jambas de puerta}: el contacto con pared al radio expandido
+      disparaba un escape que peleaba con el objetivo $\Rightarrow$ contacto sólo al
+      núcleo duro ($r_{\min}$); la repulsión suave dobla esquinas sin oscilar.
+    \item \textbf{Lección}: al agregar una coordenada hay que auditar \emph{todos} los
+      caminos de datos; los \emph{defaults} silenciosos dan simulaciones plausibles pero
+      erróneas.
+  \end{itemize}
 \end{frame}
 
 % =============================================================================
@@ -285,7 +309,9 @@
           (\SI{0.0375}{s} en evacuación); $\Delta t_{\text{out}}=\SI{0.2}{s}$.
         \item Escalera: ancho \SI{2.6}{m}; velocidad efectiva en el tramo
           $\approx\SI{0.59}{m/s}$.
-        \item \textbf{5 realizaciones} por punto (semillas 1--5): se reporta
+        \item \textbf{5 realizaciones} por punto (semillas 1--5): la semilla global
+          gobierna todos los procesos aleatorios (spawn, ruteo, elección de salida/aula,
+          tiempos de servicio) $\Rightarrow$ realizaciones independientes. Se reporta
           media $\pm\,\sigma$, con barras de error.
       \end{itemize}
     \end{column}
@@ -356,10 +382,10 @@
           $66.7\pm3.6$~s y el máximo de $93.5\pm3.2$ a $151.2\pm10.8$~s.
         \item La dispersión entre realizaciones crece con $N$: más congestión, más
           sensibilidad a la realización.
-        \item Barras de error: $\pm\,\sigma$ entre las 5 realizaciones; en los puntos
-          de menor dispersión la barra queda dentro del marcador.
-        \item Queda $\approx 1.4$ agente por corrida sin evacuar (livelock de jamba de
-          puerta, límite conocido del modelo de fuerzas).
+        \item Barras de error: $\pm\,\sigma$ entre las 5 realizaciones (dentro del
+          marcador donde no se ven).
+        \item Quedan $\approx 1.4$ agentes por corrida sin evacuar: \emph{livelock} contra
+          muros (boca de escalera de la planta alta, portón de salida).
       \end{itemize}
     \end{column}
   \end{columns}
@@ -509,8 +535,9 @@
     \item La \textbf{ocupación del kiosco crece al acortar la ventana de llegada} y, a
       ventana fija, crece más que proporcionalmente con la cantidad de alumnos, en el
       rango explorado.
-    \item Límite conocido: $\approx 1.4$ agente por corrida no evacúa por el livelock
-      de jamba de puerta del modelo de fuerzas (mitigado, no eliminado).
+    \item Límite conocido: $\approx 1.4$ agentes por corrida no evacúan por el \emph{livelock}
+      de contacto con muros del modelo de fuerzas (reducido con el contacto al núcleo duro,
+      no eliminado).
   \end{itemize}
 \end{frame}
 

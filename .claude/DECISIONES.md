@@ -654,6 +654,17 @@ del `CpmOperationalModelStairTest`).
 - *Bajar `ve` global o el rango del avoidance de pared (`Aw`,`Bw`)*: descalibra el A-CPM en todos lados;
   el cambio de umbral de contacto es local y respeta la calibración publicada de la repulsión suave.
 
+**Nota (2026-07-07) — dónde persiste el remanente.** Análisis de los 15 `output.csv` de los barridos
+finales de Evacuación (N=40/80/120 × seeds 1–5, con D17 y D22 aplicados): quedan 1.4/1.6/1.4
+no-evacuados por corrida en promedio, y **ninguno** (0/22) está en jambas de puerta de aula — ese
+caso quedó efectivamente resuelto por esta decisión. El livelock del mecanismo D14 (oscilación
+escape-vs-objetivo con desplazamiento neto ~0) **persiste en dos geometrías estrechas no cubiertas**:
+la **boca de la escalera SUR en P1** (14/22, agente a ~0.2 m de la baranda del hueco en z=3.0, sin
+iniciar el descenso) y la **jamba del portón norte de salida** en PB (7/22, x≈30.15, y≈53.6). El caso
+restante (1/22, N=120 seed 1) es un borde del criterio operativo: todos evacuaron a t≈143 s y el
+último agente en tránsito figura en el último cuadro escrito. El informe y la presentación reflejan
+esta atribución corregida ("livelock de contacto con muros", sin mencionar puertas de aula).
+
 ---
 
 ## D18 — Migración 3D del spawn de generadores: propagar la planta (z) al agente creado

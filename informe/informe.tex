@@ -122,8 +122,10 @@ La ampliación se resolvió con un enfoque \textbf{híbrido}: se introdujo un \t
 para las posiciones y velocidades, pero se conservó \texttt{Vec2} como tipo planar de toda la
 dinámica horizontal. La física peatonal ocurre en el plano de cada planta; la $z$ cambia sólo
 en la escalera y se obtiene por interpolación del avance, sin componente vertical de velocidad.
-De este modo no hubo que reescribir la geometría planar ni el núcleo del CPM. La
-Tabla~\ref{tab:modulos} resume qué se modificó en cada módulo.
+De este modo no hubo que reescribir la geometría planar ni el núcleo del CPM. Se descartó la
+migración total a \texttt{Vec3}: obligaba a reescribir toda la geometría planar y arriesgaba que
+la $z$ se moviera por fuerzas planares por error, cuando en rigor sólo cambia sobre la escalera.
+La Tabla~\ref{tab:modulos} resume qué se modificó en cada módulo.
 
 \begin{table}[H]
 \centering
@@ -161,8 +163,86 @@ en \texttt{DECISIONES.md} (D1--D23).}
 \label{tab:modulos}
 \end{table}
 
-Se mantuvo el CPM como único modelo físico y se eliminó el Social Force Model (SFM), que este
-trabajo no utiliza.
+\paragraph{Tipos base y la coordenada $z$.}
+El tipo de posición y velocidad pasa a \texttt{Vec3} y \texttt{AgentState} gana su $z$. La $z$
+\emph{no} es un grado de libertad dinámico: no se agrega una velocidad vertical $v_z$, porque la
+dinámica vertical no aporta al modelo peatonal y complica el CPM. Sobre la escalera la $z$ surge
+de interpolar el avance planar a lo largo del tramo. El \texttt{setPosition}$(x,y)$ que el CPM
+llama en cada paso conserva la $z$ a propósito; sólo el avance por la escalera la modifica. La
+distancia de \texttt{Vec3} es euclídea 3D, lista para la heurística del A*, y hay una variante
+horizontal para la dinámica planar.
+
+\paragraph{Geometría y formato de escenarios.}
+Cada elemento de geometría (pared, salida, aula, generador y server) lleva una única coordenada
+de planta $z$ y conserva su forma planar en \texttt{Vec2}. Se descartó poner la $z$ por extremo:
+permitiría muros inclinados pero rompería la planaridad de la que dependen el CIM por planta y el
+anti-tunneling. Los CSV ya traían la $z$ (antes se descartaba); ahora se honra. La escalera se
+declara en un \texttt{STAIRS.csv} nuevo, dejando intactos los CSV existentes: cada fila es el
+\emph{eje} de la escalera, del pie $(x_1,y_1,z_1)$ al tope $(x_2,y_2,z_2)$, lo que vuelve
+inequívoco cuál extremo es el pie y cuál el tope (un rectángulo con $z$ de origen y destino era
+ambiguo). Una planta se identifica por su valor $z$, con consultas por planta, porque el grafo y
+la vecindad operan sobre una planta a la vez.
+
+\paragraph{Grafo de navegación.}
+El \emph{foot-target} pasa a \texttt{Vec3} de punta a punta del pipeline (máquina de estados
+$\rightarrow$ PreOM $\rightarrow$ modelo físico, que lo proyecta a $xy$). El grafo se genera
+\textbf{por planta} con el generador automático de grilla existente, y los subgrafos se unen con
+aristas de escalera (nodo al pie $\leftrightarrow$ nodo al tope) cuyo costo es el largo real del
+tramo inclinado (distancia 3D). La heurística del A* pasa a distancia euclídea 3D, como pide el
+enunciado. La visibilidad y el \emph{Furthest Visible Point} son por planta: un agente no ``ve''
+nodos de otra planta, porque hay una losa en el medio; el cruce entre plantas ocurre sólo por la
+arista de escalera. El grafo se construye desde la geometría, única fuente con la $z$ y las
+escaleras.
+
+\paragraph{Vecinos por planta.}
+La detección de vecinos es independiente por planta salvo sobre las escaleras. Un \emph{facade}
+mantiene una grilla CIM 2D por planta más un índice ``puente'' por escalera (fuerza bruta, pues
+sobre el tramo hay pocos agentes). En los descansos los contenedores se acoplan: el agente de
+planta consulta su grilla más los puentes que aterrizan ahí, y el agente en escalera consulta su
+puente más las dos grillas de las plantas que conecta. Se descartó asignar al agente de escalera
+la planta más cercana (dos agentes cerca del punto medio del tramo caerían en grillas distintas y
+\emph{no se verían}: una discontinuidad justo donde el enunciado pide continuidad) y también una
+grilla 3D (las celdas verticales no aportan: los pisos son planos y su separación es discreta). Se
+preservó ---y se testeó--- la detección de las paredes por su punto más cercano, y de sus vértices
+cuando el vértice es el punto más cercano.
+
+\paragraph{Física.}
+La dinámica sigue siendo planar en la planta del agente. Sobre la escalera se aplican dos efectos:
+la velocidad deseada se multiplica por el factor de velocidad reducida de la escalera, y tras el
+paso planar se actualiza la $z$ por interpolación del avance. El anti-tunneling usa \emph{sólo} las
+paredes de la planta actual del agente, y la unión de las dos plantas conectadas cuando está sobre
+una escalera, para no atravesar los muros de ninguno de los dos descansos al entrar o salir del
+tramo. Que un muro de la planta alta frenara a un agente de la planta baja (misma proyección $xy$)
+sería un error. Se mantuvo el CPM como único modelo físico y se eliminó el Social Force Model
+(SFM), que este trabajo no utiliza y que sólo duplicaba el costo de cada cambio de interfaz.
+
+\paragraph{Salida y animación.}
+La salida gana una columna $z$ inmediatamente después de $y$
+(\texttt{tout; x; y; z; vx; vy; state; id}): agrupa la posición 3D y deja la velocidad planar
+junta. Como se controlan todos los consumidores del formato, no hubo costo de compatibilidad. Cada
+planta se sigue animando en 2D (círculos coloreados por estado, con filtro por planta) y se agrega
+una vista 3D a 45\textdegree{} con las plantas apiladas, como pide el enunciado.
+
+\paragraph{La integración multiplanta.}
+Cada módulo quedó verde en aislamiento con sus tests unitarios, pero al correr el \emph{primer}
+escenario real de dos plantas \textbf{ningún agente subía a la planta alta}, y sin ningún error
+en tiempo de ejecución. La causa no fue un defecto del diseño sino una serie de caminos de datos
+donde la $z$ se perdía en silencio, con un \emph{default} $z=0$, y la simulación resultante era
+plausible pero errónea. La depuración destapó varios de esos caminos. La task de un grupo de
+ubicaciones tomaba la $z$ del \emph{primer} candidato, así que un grupo con aulas en ambas plantas
+quedaba clavado en la planta baja; se pasó a llevar la planta por candidato. Las aulas de ambas
+plantas comparten $(x,y)$ ---una sobre otra---, de modo que resolver el candidato elegido por su
+posición colapsaba a la planta baja; se pasó a resolver por índice. El \emph{Furthest Visible
+Point} ruteaba hasta el pie de la escalera y se quedaba ahí, porque el tope, en otra planta, ``no
+es visible''; al llegar al pie el hop avanza ahora explícitamente al tope. La interpolación de la
+$z$ exigía estar estrictamente entre plantas y nunca arrancaba al pisar el pie; se la detecta
+también cuando el \emph{foot-target} apunta a otra planta. Y tanto los servers como los generadores
+descartaban la $z$ en sus constructores de conveniencia, de modo que las aulas y los spawns de la
+planta alta caían a $z=0$; se propagó la planta de punta a punta. La lección es explícita: al
+agregar una coordenada hay que auditar \emph{todos} los caminos de datos que copian o reconstruyen
+estado, porque los \emph{defaults} silenciosos producen simulaciones que corren y ``se ven bien''
+pero son erróneas; los tests por módulo no reemplazan un escenario de integración real con dos
+plantas.
 
 \paragraph{Perfil físico por generador (modo crisis).}
 El perfil físico del agente ($v_d$, radios, etc.) se asigna por zona generadora: cada generador
@@ -186,12 +266,36 @@ vista 3D la escalera se dibuja como un perfil de peldaños en lugar de una líne
 \paragraph{Corrección del salto de $z$.}
 Al inspeccionar la animación se detectó que algunos agentes que llegaban a la escalera saltaban
 de la planta baja a media altura en un solo cuadro, como si se teletransportaran a mitad del
-tramo. El diagnóstico mostró que no era un artefacto del render sino del ruteo: los agentes que
-se acercaban al pie por dentro de la huella recién enganchaban la $z$ a mitad del tramo. Se
-resolvió excluyendo de la grilla del grafo los nodos que caen dentro de la huella de la
-escalera (de modo que el agente entra por el pie con avance nulo) y adelantando el punto en que
-el ruteo lo compromete a subir. Con esto el salto de $z$ por cuadro pasó a ser imperceptible,
-sin regresar el ruteo multiplanta.
+tramo. El diagnóstico mostró que no era un artefacto del render sino del ruteo: concurrían dos causas,
+la grilla del grafo colocaba nodos dentro de la huella de la escalera ---de modo que el A*
+ruteaba al pie a ras del piso por dentro de la propia huella--- y el cambio de hop del pie al tope ocurría
+lejos del pie, con lo que la $z$ recién enganchaba a mitad del tramo. Se resolvió excluyendo de
+la grilla del grafo los nodos que caen dentro de la huella de la escalera (de modo que el agente
+entra por el pie con avance nulo) y adelantando el punto en que el ruteo lo compromete a subir.
+Con esto el salto de $z$ por cuadro pasó a ser imperceptible, sin regresar el ruteo multiplanta.
+
+\paragraph{Livelock en la jamba de puerta.}
+En la animación afinada se observó que algunos agentes oscilaban pegados a la jamba de una puerta,
+sin cruzarla, durante decenas de segundos. El diagnóstico descartó el ruteo: el hop era estable y
+correcto. La causa estaba aguas arriba, en las fuerzas. El CPM trataba la pared como
+\emph{contacto} en cuanto el agente entraba en su radio expandido (el espacio personal, hasta
+$r_{\max}$) y disparaba la velocidad de escape perpendicular, que ignora el objetivo; cerca de una
+jamba ese escape pelea con la atracción al destino y el agente oscila en el lugar. Un intento de
+arreglarlo en el anti-tunneling se revirtió, porque la causa no estaba ahí. La corrección definitiva es de
+las fuerzas: la pared cuenta como contacto \emph{sólo} cuando el cuerpo físico la tocaría
+($d \le r_{\min}$, núcleo duro); en la franja $r_{\min}$--$r_{\max}$ actúa la repulsión suave de
+pared del A-CPM, que aparta al agente sin anular la atracción al objetivo, de modo que dobla
+esquinas y cruza puertas. Es coherente con el criterio de contacto anisotrópico que el A-CPM ya
+usa entre agentes. En el escenario base la oscilación-en-esquina cayó de $20.1\%$ a $5.5\%$ de las
+ventanas en movimiento y los agentes atascados pasaron de $2/30$ a $0/30$.
+
+\paragraph{Reproducibilidad.}
+La semilla global se propaga a todos los procesos aleatorios: el spawn de agentes, el ruteo, la
+selección de salida y de aula, y los tiempos de servicio y de permanencia. Antes sólo alimentaba
+el spawn y el ruteo, y el resto usaba constantes fijas, de modo que entre réplicas cada agente
+repetía las mismas elecciones. Sin semilla el comportamiento es idéntico al histórico (se recae en
+las constantes de siempre), lo que preserva los tests y las corridas sueltas; con semilla, las
+realizaciones son genuinamente independientes.
 
 \paragraph{Verificación.}
 La suite de tests automáticos queda en \textbf{143 tests, 0 fallos, 0 omitidos}, incluidos los
@@ -297,9 +401,11 @@ el recreo. Se adoptó como zona observable el rectángulo del kiosco, $R=[2,14]\
 $z=0$; el ``por ejemplo'' del enunciado habilita medir donde efectivamente hay congestión.
 
 \paragraph{Realizaciones.}
-Cada punto de los barridos se obtiene de \textbf{5 realizaciones} (semillas 1 a 5). Los valores
-reportados son la media entre realizaciones, y las barras o el término $\pm\sigma$ indican el
-desvío estándar muestral entre ellas. El criterio de evacuado es el de la ecuación~\ref{eq:tevac}.
+Cada punto de los barridos se obtiene de \textbf{5 realizaciones} (semillas 1 a 5); la semilla
+gobierna todos los procesos aleatorios, de modo que las realizaciones son independientes. Los
+valores reportados son la media entre realizaciones, y las barras o el término $\pm\sigma$ indican
+el desvío estándar muestral entre ellas. El criterio de evacuado es el de la
+ecuación~\ref{eq:tevac}.
 
 \section{Resultados}
 \label{sec:resultados}
@@ -352,11 +458,17 @@ planta alta, que deben bajar la escalera \emph{switchback} (más larga y a veloc
 un tramo recto); el segundo lóbulo se desplaza hacia tiempos mayores al crecer $N$ y produce la
 cola larga.
 
-De los $N$ agentes no evacúan todos: queda sin evacuar $\approx 1.4$ por corrida en promedio.
-Estos agentes rezagados están asociados al \emph{livelock} de jamba de puerta documentado en
-\texttt{DECISIONES.md} (D14): un agente cuya dirección deseada queda casi paralela a la pared
-del pasillo puede oscilar en la jamba sin cruzar. No es congestión de la escalera; se trata de
-un caso residual del modelo de fuerzas mitigado con puertas más anchas.
+De los $N$ agentes no evacúan todos: queda sin evacuar $\approx 1.4$ por corrida en promedio
+($1.4$, $1.6$ y $1.4$ para $N=40$, $80$ y $120$). La inspección de los cuadros finales muestra
+el \emph{livelock} de contacto con muros descripto en la Sección~\ref{sec:impl}: un agente
+aislado, cuya dirección deseada queda casi paralela a un muro, alterna entre el escape de
+contacto y la atracción al objetivo, con velocidad instantánea $\sim v_d$ pero desplazamiento
+neto nulo. Tras endurecer el criterio de contacto, el atasco ya no ocurre en las puertas de
+aula: el remanente aparece en la boca de la escalera de la planta alta (el agente oscila contra
+la baranda del hueco sin iniciar el descenso) y, en menor medida, en la jamba del portón de
+salida de la planta baja. Es un agente aislado por punto de atasco, no congestión de la
+escalera. (En una de las quince corridas el ``rezagado'' era simplemente el último agente en
+tránsito hacia la salida, un caso borde del criterio operativo de evacuado.)
 
 \subsection{Ingreso}
 \label{sec:ingreso}
@@ -513,8 +625,10 @@ por las escaleras.}
   crecer $N$.
   \item En el ingreso, la ocupación de la zona observada crece al acortar la ventana de llegada
   (mayor caudal) y, en el estudio complementario, crece más que proporcionalmente con $N_{\max}$.
-  \item En promedio $1.4$ agentes por corrida no evacúan, por el \emph{livelock} de jamba de
-  puerta del modelo de fuerzas; es un límite conocido, mitigado pero no eliminado.
+  \item En promedio $1.4$ agentes por corrida no evacúan, por el \emph{livelock} de contacto
+  con muros del modelo de fuerzas; el endurecimiento del criterio de contacto lo eliminó de las
+  puertas de aula, pero persiste en la boca de la escalera y en el portón de salida. Es un
+  límite conocido, reducido pero no eliminado.
 \end{itemize}
 
 \begin{thebibliography}{9}

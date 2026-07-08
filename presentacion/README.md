@@ -20,8 +20,10 @@ con máximo 2 animaciones por estudio, sin índice y sin slide de referencias (c
 1. **Subir las 4 animaciones a YouTube/Vimeo** y pegar los links en los macros
    `\videolinkEvacBaja`, `\videolinkEvacAlta`, `\videolinkIngresoUno`, `\videolinkIngresoDiez`
    (cabecera del `.tex`). Revisar que no se peguen caracteres extraños.
-2. **Ensayar y cronometrar** (~13 min). Si sobra contenido, los candidatos a recortar son las
-   dos slides de "huella espacial" (heatmaps) y la del estudio complementario de N_máx.
+2. **Ensayar y cronometrar** (~13 min) con el guion por diapositiva de [`GUION.md`](./GUION.md)
+   (tiempos, checkpoints por sección, plan de recortes y preguntas esperables). Si sobra
+   contenido, los candidatos a recortar son las dos slides de "huella espacial" (heatmaps) y
+   la del estudio complementario de N_máx.
 
 ## Assets
 
