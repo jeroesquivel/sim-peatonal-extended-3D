@@ -158,8 +158,7 @@ Animación & Cada planta en 2D (círculos) más una vista 3D a 45\textdegree{} c
 apiladas. \\
 \bottomrule
 \end{tabular}
-\caption{Cambios de la ampliación a 3D por módulo. Las decisiones de diseño están registradas
-en \texttt{DECISIONES.md} (D1--D23).}
+\caption{Cambios de la ampliación a 3D por módulo.}
 \label{tab:modulos}
 \end{table}
 
@@ -188,8 +187,8 @@ El \emph{foot-target} pasa a \texttt{Vec3} de punta a punta del pipeline (máqui
 $\rightarrow$ PreOM $\rightarrow$ modelo físico, que lo proyecta a $xy$). El grafo se genera
 \textbf{por planta} con el generador automático de grilla existente, y los subgrafos se unen con
 aristas de escalera (nodo al pie $\leftrightarrow$ nodo al tope) cuyo costo es el largo real del
-tramo inclinado (distancia 3D). La heurística del A* pasa a distancia euclídea 3D, como pide el
-enunciado. La visibilidad y el \emph{Furthest Visible Point} son por planta: un agente no ``ve''
+tramo inclinado (distancia 3D). La heurística del A* pasa a distancia euclídea 3D. La visibilidad
+y el \emph{Furthest Visible Point} son por planta: un agente no ``ve''
 nodos de otra planta, porque hay una losa en el medio; el cruce entre plantas ocurre sólo por la
 arista de escalera. El grafo se construye desde la geometría, única fuente con la $z$ y las
 escaleras.
@@ -201,7 +200,8 @@ sobre el tramo hay pocos agentes). En los descansos los contenedores se acoplan:
 planta consulta su grilla más los puentes que aterrizan ahí, y el agente en escalera consulta su
 puente más las dos grillas de las plantas que conecta. Se descartó asignar al agente de escalera
 la planta más cercana (dos agentes cerca del punto medio del tramo caerían en grillas distintas y
-\emph{no se verían}: una discontinuidad justo donde el enunciado pide continuidad) y también una
+\emph{no se verían}: una discontinuidad artificial en un tramo que es físicamente continuo) y
+también una
 grilla 3D (las celdas verticales no aportan: los pisos son planos y su separación es discreta). Se
 preservó ---y se testeó--- la detección de las paredes por su punto más cercano, y de sus vértices
 cuando el vértice es el punto más cercano.
@@ -221,7 +221,7 @@ La salida gana una columna $z$ inmediatamente después de $y$
 (\texttt{tout; x; y; z; vx; vy; state; id}): agrupa la posición 3D y deja la velocidad planar
 junta. Como se controlan todos los consumidores del formato, no hubo costo de compatibilidad. Cada
 planta se sigue animando en 2D (círculos coloreados por estado, con filtro por planta) y se agrega
-una vista 3D a 45\textdegree{} con las plantas apiladas, como pide el enunciado.
+una vista 3D a 45\textdegree{} con las plantas apiladas.
 
 \paragraph{La integración multiplanta.}
 Cada módulo quedó verde en aislamiento con sus tests unitarios, pero al correr el \emph{primer}
@@ -397,13 +397,14 @@ corresponde al modo crisis (perfil por generador).}
 \end{description}
 
 \paragraph{Zona de interés del Ingreso.}
-El enunciado sugiere observar ``una zona, por ejemplo antes de la escalera''. Se probó el pie de
-la escalera principal y no muestra congestión apreciable: la escalera \emph{switchback} es ancha
-(dos carriles) y sólo la mitad de los alumnos suben a la planta alta, repartidos entre las dos
-escaleras y a lo largo de la ventana, de modo que el pie queda casi vacío. La congestión del
-Ingreso se forma en cambio en el frente del kiosco, donde se agolpan los alumnos que entran por
-el recreo. Se adoptó como zona observable el rectángulo del kiosco, $R=[2,14]\times[42,52]$ en
-$z=0$; el ``por ejemplo'' del enunciado habilita medir donde efectivamente hay congestión.
+Como zona de interés se evaluó primero el pie de la escalera principal, un punto habitual de
+observación en estudios de congestión de ingreso. Se probó ese punto y no muestra congestión
+apreciable: la escalera \emph{switchback} es ancha (dos carriles) y sólo la mitad de los alumnos
+suben a la planta alta, repartidos entre las dos escaleras y a lo largo de la ventana, de modo
+que el pie queda casi vacío. La congestión del Ingreso se forma en cambio en el frente del
+kiosco, donde se agolpan los alumnos que entran por el recreo. Se adoptó como zona observable el
+rectángulo del kiosco, $R=[2,14]\times[42,52]$ en $z=0$, por ser donde efectivamente se concentra
+la congestión.
 
 \paragraph{Realizaciones.}
 Cada punto de los barridos se obtiene de \textbf{5 realizaciones} (semillas 1 a 5); la semilla
@@ -681,7 +682,7 @@ java -Dsimped.seed=1 -cp "target/classes:$(cat out/.cp.txt)" \
 python tools/visualize_simulation_3d.py --scenario scenarios/escuela \
      --output out/escuela.csv --out out/escuela_3d.mp4 --stride 3
 
-# Evacuacion: barrido N en {40, 80, 120}, 5 semillas + figuras
+# Evacuacion: barrido N en {40, 80, 120, 200, 300, 400, 500}, 5 semillas + figuras
 python tools/sweep_run.py --mode evacuacion --values 40,80,120,200,300,400,500 --seeds 1,2,3,4,5 --om cpm
 python tools/plot_evacuacion.py --sweep-dir out/sweeps/evacuacion --seeds all --out-prefix out/evac
 

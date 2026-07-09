@@ -360,7 +360,9 @@
 
 \begin{frame}[c]{La distribución de tiempos de evacuación es bimodal}
   \centering
-  \includegraphics[width=0.95\linewidth]{evac_hist.png}\\[4pt]
+  \includegraphics[width=0.95\linewidth,height=0.5\textheight,keepaspectratio]{evac_curves_band.png}\\[2pt]
+  {\footnotesize Curvas de densidad con banda $\pm\sigma$ entre 5 realizaciones (por
+    legibilidad, sólo $N=80,200,300,400,500$).}
   \begin{itemize}
     \item El lóbulo rápido es la \textbf{planta baja}; el lento, la \textbf{planta alta},
       que debe bajar la escalera a velocidad reducida.
@@ -373,18 +375,21 @@
   \begin{columns}[T]
     \begin{column}{0.56\textwidth}
       \centering
-      \includegraphics[width=\linewidth,height=0.74\textheight,keepaspectratio]{evac_scalar.png}
+      \includegraphics[width=\linewidth,height=0.66\textheight,keepaspectratio]{evac_scalar.png}
     \end{column}
     \begin{column}{0.42\textwidth}
+      \small
       \textbf{Observaciones}
       \begin{itemize}
-        \item El edificio se vacía completo en todo el rango: de $N=40$ a $500$ el
-          promedio pasa de $38.9\pm0.6$ a $108.7\pm3.2$~s.
-        \item Entre $N=200$ y $300$ el \textbf{máximo} salta de $129\pm9$ a
-          $244\pm103$~s: las escaleras pasan a trabajar \textbf{saturadas}.
-        \item La dispersión ($\pm\,\sigma$, 5 realizaciones) es máxima en ese cruce:
-          en $N=300$ un atasco transitorio estiró una realización a $427$~s.
-        \item Queda $\approx 1$ agente sin evacuar por corrida, constante en $N$.
+        \item El edificio se vacía completo en todo el rango: de $N=40$ a $500$
+          el promedio pasa de $38.9$ a $108.2$~s ($\times2.8$).
+        \item El \textbf{máximo} crece más rápido, de $57.0$ a $301.4$~s
+          ($\times5.3$): lo gobierna el agente más rezagado del lóbulo lento.
+        \item Desde $N\approx200$ la brecha promedio--máximo crece a ritmo
+          casi constante ($\sim$40--45~s cada 100 agentes): la escalera trabaja
+          \textbf{saturada}, con cola en su boca.
+        \item Queda $\approx 1$ agente sin evacuar por corrida, constante en
+          $N$ ($1.0$ a $1.2$ en todo el barrido).
       \end{itemize}
     \end{column}
   \end{columns}
