@@ -380,15 +380,20 @@ corresponde al modo crisis (perfil por generador).}
   \item[Evacuación.] Los alumnos arrancan dentro de las aulas de ambas plantas y evacúan a las
   salidas; los de la planta alta bajan por las escaleras. Evacúan en \emph{modo crisis}
   ($v_d=\SI{2.0}{\metre\per\second}$). El input es la capacidad total $N$, con barrido
-  $N\in\{40,80,120\}$. El tiempo total de simulación es \SI{400}{\second}.
+  $N\in\{40,80,120,200,300,400,500\}$ (hasta $\sim$31 alumnos por aula, $\approx$0.5
+  agentes/\si{\metre\squared} de ocupación inicial). El tiempo total de simulación es de
+  \SI{400}{\second} para $N\le 120$ y escala linealmente con $N$ por encima
+  ($400 + 1.2\,(N-120)$~\si{\second}), de modo que toda capacidad tenga margen para vaciarse.
   \item[Ingreso.] Los $N_{\max}=120$ alumnos llegan por las entradas y se dirigen a sus aulas;
   los que entran por el recreo pasan antes por el kiosco. El input es la ventana de llegada
   $T_a\in\{1,5,10\}$~min a $N_{\max}$ fijo, equivalente a un caudal
   $Q=N_{\max}/T_a\in\{120,24,12\}$ agentes/min (ec.~\ref{eq:caudal}). El tiempo total es
   $T_a + \SI{250}{\second}$.
   \item[Estudio complementario.] Sobre el mismo sub-escenario de Ingreso se varía $N_{\max}\in
-  \{60,120,180\}$ a ventana fija $T_a=\SI{5}{\minute}$, para ver cómo escala la congestión con
-  la cantidad de gente.
+  \{60,120,180,240,300\}$ a ventana fija $T_a=\SI{5}{\minute}$, para ver cómo escala la
+  congestión con la cantidad de gente. (A esta ventana las puertas entregan el caudal pedido
+  completo; con ventanas más cortas el generador se topa con su límite físico de
+  $\sim$3 personas/min por metro de puerta y el input dejaría de ser alcanzable.)
 \end{description}
 
 \paragraph{Zona de interés del Ingreso.}
@@ -413,14 +418,15 @@ ecuación~\ref{eq:tevac}.
 \subsection{Evacuación}
 \label{sec:evac}
 
-La distribución de tiempos de evacuación (ec.~\ref{eq:tevac}) para las tres capacidades se
+La distribución de tiempos de evacuación (ec.~\ref{eq:tevac}) para las siete capacidades se
 muestra en la Figura~\ref{fig:evac-hist}, y el escalar (promedio y máximo) en función de $N$ en
 la Figura~\ref{fig:evac-scalar}. La Tabla~\ref{tab:evac} resume los valores.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{evac_hist.png}
-\caption{Distribución de tiempos de evacuación para $N=40$, $80$ y $120$.}
+\caption{Distribución de tiempos de evacuación para las capacidades del barrido
+($N=40$ a $500$).}
 \label{fig:evac-hist}
 \end{figure}
 
@@ -441,6 +447,10 @@ $N$ & evacuados & $t_{\text{evac}}$ promedio [\si{\second}] & $t_{\text{evac}}$ 
 40  & $39.0$  & $38.9 \pm 0.6$ & $57.0 \pm 1.5$ \\
 80  & $78.8$  & $46.2 \pm 0.9$ & $73.7 \pm 4.3$ \\
 120 & $118.8$ & $50.8 \pm 0.9$ & $91.5 \pm 3.1$ \\
+200 & $199.0$ & $63.2 \pm 1.6$ & $129.3 \pm 8.5$ \\
+300 & $298.8$ & $88.7 \pm 20.0$ & $243.5 \pm 102.8$ \\
+400 & $399.0$ & $94.5 \pm 1.5$ & $251.4 \pm 3.6$ \\
+500 & $499.0$ & $108.7 \pm 3.2$ & $305.2 \pm 17.9$ \\
 \bottomrule
 \end{tabular}
 \caption{Evacuación en modo crisis: agentes evacuados (media entre realizaciones), tiempo
@@ -449,22 +459,31 @@ promedio y máximo por capacidad. Cada valor es media $\pm$ desvío estándar mu
 \label{tab:evac}
 \end{table}
 
-El tiempo de evacuación crece con $N$: al triplicar la capacidad el promedio pasa de
-$38.9\pm0.6$ a $50.8\pm0.9$~\si{\second} y el máximo de $57.0\pm1.5$ a
-$91.5\pm3.1$~\si{\second}. La dispersión entre realizaciones también crece con $N$ (más
-congestión, más sensibilidad a la realización). La distribución es \textbf{bimodal}: un primer
-lóbulo corto corresponde a los agentes de la planta baja y un segundo lóbulo lento a los de la
-planta alta, que deben bajar la escalera \emph{switchback} (más larga y a velocidad reducida que
-un tramo recto); el segundo lóbulo se desplaza hacia tiempos mayores al crecer $N$ y produce la
-cola larga.
+El edificio se vacía por completo en todo el rango explorado: los evacuados son $\ge N-1$
+hasta $N=500$. El tiempo de evacuación crece con $N$ en dos regímenes. Hasta $N\approx 200$
+el crecimiento es suave (multiplicar la capacidad por 5 apenas ronda el $\times$1.6 en el
+promedio: las escaleras absorben el flujo). Entre $N=200$ y $N=300$ el \textbf{máximo} salta de
+$129.3\pm8.5$ a $243.5\pm102.8$~\si{\second}: las escaleras pasan a trabajar \emph{saturadas},
+con cola sostenida en sus bocas, y el tiempo del último evacuado queda gobernado por el drenaje
+de esa cola (que crece con $N$) y no por la longitud del recorrido. La dispersión entre
+realizaciones es máxima justo en ese cruce: en $N=300$, cuatro de las cinco realizaciones
+terminan con máximos de 190--206~\si{\second}, pero en una se forma un atasco transitorio en la
+boca de una escalera que se disuelve solo y estira el máximo a $427$~\si{\second} --- cerca del
+régimen crítico, la realización manda. Pasado el cruce ($N=400$, $500$) la cola saturada domina
+y la dispersión vuelve a bajar. La distribución es \textbf{bimodal}: un primer lóbulo corto
+corresponde a los agentes de la planta baja y un segundo lóbulo lento a los de la planta alta,
+que deben bajar la escalera \emph{switchback} (más larga y a velocidad reducida que un tramo
+recto); el segundo lóbulo se desplaza hacia tiempos mayores y se ensancha al crecer $N$, hasta
+dominar la distribución en las capacidades grandes.
 
-De los $N$ agentes no evacúan todos: queda sin evacuar $\approx 1$ por corrida
-($1.0$, $1.2$ y $1.2$ para $N=40$, $80$ y $120$). El descenso por la escalera \emph{switchback}
+De los $N$ agentes no evacúan todos: queda sin evacuar $\approx 1$ por corrida, y ese remanente
+\textbf{no crece con $N$} ($1.0$ a $1.2$ en todo el barrido, incluso con $N=500$). El descenso
+por la escalera \emph{switchback}
 fluye sin atascos ---ningún agente queda retenido en la escalera ni en su boca---, de modo que
 el remanente es casi siempre el último agente todavía en tránsito hacia la salida en el instante
 en que termina la corrida (el output deja de escribir cuadros al vaciarse el edificio): un caso
 borde del criterio operativo de evacuado (ec.~\ref{eq:tevac}), no una evacuación fallida. De
-manera esporádica (dos agentes en una de las quince corridas) reaparece en la planta baja el
+manera esporádica (en corridas aisladas de las 35 del barrido) reaparece en la planta baja el
 \emph{livelock} de contacto con muros descripto en la Sección~\ref{sec:impl}: un agente aislado,
 cuya dirección deseada queda casi paralela a la jamba de un portón, alterna entre el escape de
 contacto y la atracción al objetivo, con velocidad instantánea $\sim v_d$ pero desplazamiento
@@ -529,7 +548,7 @@ Figura~\ref{fig:nmax-scalar} y los valores en la Tabla~\ref{tab:nmax}.
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.85\textwidth]{ingreso_nmax_poblacion.png}
-\caption{Población en la zona vs. tiempo para $N_{\max}=60$, $120$ y $180$ (ventana de
+\caption{Población en la zona vs. tiempo para $N_{\max}=60$ a $300$ (ventana de
 5~minutos).}
 \label{fig:nmax-pob}
 \end{figure}
@@ -551,6 +570,8 @@ $N_{\max}$ & Ocupación pico & Ocupación promedio \\
 60  & $4.6 \pm 0.9$  & $1.1 \pm 0.2$ \\
 120 & $21.0 \pm 3.6$ & $8.9 \pm 2.3$ \\
 180 & $51.4 \pm 1.8$ & $30.6 \pm 2.1$ \\
+240 & $78.8 \pm 2.3$ & $51.4 \pm 1.0$ \\
+300 & $104.0 \pm 3.7$ & $70.8 \pm 3.3$ \\
 \bottomrule
 \end{tabular}
 \caption{Estudio complementario: ocupación pico y promedio en la zona del kiosco en función de
@@ -558,9 +579,15 @@ $N_{\max}$, con ventana fija de 5~minutos. Valores medios entre 5 realizaciones.
 \label{tab:nmax}
 \end{table}
 
-La ocupación crece más que proporcionalmente con $N_{\max}$ en el rango explorado: al triplicar
-la población el pico se multiplica por $\sim$11 ($4.6$, $21.0$ y $51.4$). La zona no absorbe el
-flujo de forma proporcional, sino que se satura a medida que crece la cantidad de agentes.
+La ocupación muestra dos regímenes. Hasta $N_{\max}\approx 180$ el crecimiento es más que
+proporcional: triplicar la población ($60\to180$) multiplica el pico por $\sim$11 ($4.6\to51.4$)
+--- el servidor del kiosco deja de dar abasto y empieza a formarse cola. A partir de ahí el
+kiosco trabaja saturado (atiende a tasa fija) y cada agente adicional simplemente se suma a la
+cola: el pico crece de forma $\sim$lineal con pendiente $\approx 0.44$ agentes de pico por
+agente de $N_{\max}$ ($51.4 \to 78.8 \to 104.0$ para $180 \to 240 \to 300$). En el extremo
+$N_{\max}=300$ el pico de $104.0\pm3.7$ personas en $\SI{120}{\metre\squared}$ ya bordea
+1~persona/\si{\metre\squared} promediada sobre toda la zona, con densidades locales mucho
+mayores en el frente de la cola (Figura~\ref{fig:dens-ing}).
 
 \subsection{Mapas de calor}
 \label{sec:heatmaps}
@@ -619,17 +646,25 @@ por las escaleras.}
   apilada.
   \item La escalera \emph{switchback} con descanso, confinamiento y carriles de contraflujo da
   un comportamiento coherente; el artefacto del salto de $z$ se diagnosticó y resolvió.
-  \item En la evacuación, el tiempo de evacuación crece con la capacidad $N$ (promedio y máximo)
-  en el rango explorado, y su distribución es bimodal: los agentes de la planta baja salen
-  rápido y los de la planta alta forman el lóbulo lento, que se corre a tiempos mayores al
-  crecer $N$.
+  \item En la evacuación, el edificio se vacía completo en todo el rango explorado
+  ($N$ hasta $500$, $\approx$0.5 agentes/\si{\metre\squared} inicial) y el tiempo de evacuación
+  crece con la capacidad en \textbf{dos regímenes}: suave mientras las escaleras absorben el
+  flujo ($N\lesssim 200$) y gobernado por el drenaje de la cola en sus bocas cuando trabajan
+  saturadas ($N\gtrsim 300$), donde el máximo se despega del promedio. En el cruce entre
+  regímenes la sensibilidad a la realización es máxima (en $N=300$ una de cinco corridas formó
+  un atasco transitorio que duplicó el máximo). La distribución es bimodal: los agentes de la
+  planta baja salen rápido y los de la planta alta forman el lóbulo lento, que crece y se
+  ensancha con $N$ hasta dominar.
   \item En el ingreso, la ocupación de la zona observada crece al acortar la ventana de llegada
-  (mayor caudal) y, en el estudio complementario, crece más que proporcionalmente con $N_{\max}$.
-  \item En promedio $\approx 1$ agente por corrida no evacúa: casi siempre es el último agente
-  todavía en tránsito hacia la salida cuando termina la corrida (un caso borde del criterio de
-  evacuado) y, de forma esporádica, el \emph{livelock} de contacto con muros del modelo de
-  fuerzas en la jamba de un portón de la planta baja. El descenso por la escalera fluye sin
-  atascos; el remanente es un límite conocido del CPM, acotado a un agente aislado.
+  (mayor caudal). En el estudio complementario crece más que proporcionalmente con $N_{\max}$
+  hasta saturar el kiosco ($N_{\max}\approx 180$) y luego $\sim$linealmente: el servidor
+  saturado atiende a tasa fija y el excedente se acumula en la cola.
+  \item En promedio $\approx 1$ agente por corrida no evacúa, y ese remanente \textbf{no crece
+  con $N$}: casi siempre es el último agente todavía en tránsito hacia la salida cuando termina
+  la corrida (un caso borde del criterio de evacuado) y, de forma esporádica, el \emph{livelock}
+  de contacto con muros del modelo de fuerzas en la jamba de un portón de la planta baja. El
+  descenso por la escalera fluye sin atascos permanentes en todo el rango; el remanente es un
+  límite conocido del CPM, acotado a un agente aislado.
 \end{itemize}
 
 \begin{thebibliography}{9}
@@ -669,7 +704,7 @@ python tools/visualize_simulation_3d.py --scenario scenarios/escuela \
      --output out/escuela.csv --out out/escuela_3d.mp4 --stride 3
 
 # Evacuacion: barrido N en {40, 80, 120}, 5 semillas + figuras
-python tools/sweep_run.py --mode evacuacion --values 40,80,120 --seeds 1,2,3,4,5 --om cpm
+python tools/sweep_run.py --mode evacuacion --values 40,80,120,200,300,400,500 --seeds 1,2,3,4,5 --om cpm
 python tools/plot_evacuacion.py --sweep-dir out/sweeps/evacuacion --seeds all --out-prefix out/evac
 
 # Ingreso: barrido caudal 1/5/10 min, 5 semillas + figuras
@@ -677,7 +712,7 @@ python tools/sweep_run.py --mode ingreso --values 1,5,10 --seeds 1,2,3,4,5 --om 
 python tools/plot_ingreso.py --sweep-dir out/sweeps/ingreso --seeds all --out-prefix out/ingreso
 
 # Ingreso variando la cantidad de agentes (estudio complementario)
-python tools/run_ingreso_nmax.py --nmax 60,120,180 --window 5 --seeds 1,2,3,4,5
+python tools/run_ingreso_nmax.py --nmax 60,120,180,240,300 --window 5 --seeds 1,2,3,4,5
 \end{lstlisting}
 
 \end{document}

@@ -92,6 +92,11 @@ def main() -> None:
         "--out-prefix", default="out/evac",
         help="Prefijo de los PNG de salida (default: %(default)s)",
     )
+    parser.add_argument(
+        "--values", default=None,
+        help="Subconjunto de N a graficar, separado por comas (p.ej. '40,120,500' "
+             "para un histograma legible en un slide). Default: todos los del sweep-dir.",
+    )
     args = parser.parse_args()
 
     if args.seed is not None:
@@ -102,6 +107,9 @@ def main() -> None:
         seeds_sel = sweep_lib.parse_seeds_arg(args.seeds)
 
     values = sweep_lib.discover_values(args.sweep_dir)
+    if args.values is not None:
+        wanted = {int(v) for v in args.values.split(",")}
+        values = [(n, d) for n, d in values if n in wanted]
     if not values:
         print(
             f"[ERROR] no se encontró ningún v<N>/seed<S>/output.csv bajo "
@@ -161,7 +169,10 @@ def main() -> None:
     # ---- 1) Histograma de tiempos de evacuación (pool de seeds), un panel por N
     ncols = min(3, len(ns_ok))
     nrows = math.ceil(len(ns_ok) / ncols)
-    fig, axes = plt.subplots(nrows, ncols, figsize=(4.6 * ncols, 3.6 * nrows), squeeze=False)
+    # hspace amplio: con 2+ filas, los títulos de cada fila no deben pisarse con
+    # los xlabel de la fila de arriba.
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4.6 * ncols, 3.6 * nrows), squeeze=False,
+                             gridspec_kw={"hspace": 0.5, "wspace": 0.3})
     axes_flat = axes.flatten()
     for ax, n in zip(axes_flat, ns_ok):
         times = pooled[n]

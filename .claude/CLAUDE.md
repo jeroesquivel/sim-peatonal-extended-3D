@@ -295,7 +295,20 @@ sirven de referencia de cómo se generan los CSV, pero **no forman parte de este
 
 ## Estado del trabajo y pendientes (retomar acá)
 
-**Última sesión: 2026-07-07 (informe + ppt: cambios del simulador y porqués).** La fuente de verdad
+**Última sesión: 2026-07-09 (D25: re-análisis al rango post-D24).** Con el fix D24 el barrido
+N≤120 quedó corto: se extendió Evacuación a **N∈{40,80,120,200,300,400,500}×5 seeds** (max_time
+escala con N en el builder, D25) y el complementario a **Nmax∈{60..300}×5**. Resultados nuevos:
+evacuación completa en todo el rango (evacuados ≥N−1 hasta 500); **dos regímenes** (suave hasta
+N≈200; escaleras saturadas desde N≈300 con el máximo despegándose: 129±9→244±103 s, y dispersión
+máxima en el cruce — en N=300 una seed formó un atasco transitorio de 427 s que se disolvió);
+Nmax: supralineal hasta saturar el kiosco (~180) y ~lineal después (78.8±2.3 / 104.0±3.7 para
+240/300). Ingreso principal: idéntico (kiosco-dominado). Informe **15 páginas** (tablas 7/5 filas,
+análisis de regímenes, conclusiones) y ppt **26 páginas** actualizados (barrido {40..500}, anim
+"alta"=N500 nueva, hist de slide con subset {40,120,500} vía `plot_evacuacion --values`, hspace
+fix en el histograma). MP4 de presentacion/videos regenerados (incluye anim_evac_n500). Suite 143
+verdes. **Falta (usuario):** subir los 5 MP4 a YouTube + links `\videolink*`, wiki, ensayo, commit.
+
+**Sesión 2026-07-07 (informe + ppt: cambios del simulador y porqués).** La fuente de verdad
 de las decisiones es [`DECISIONES.md`](./DECISIONES.md) (**D1–D23**); la auditoría contra la wiki
 está en [`REVISION_WIKI.md`](./REVISION_WIKI.md) y el plan vigente en
 [`PLAN_ENTREGA.md`](./PLAN_ENTREGA.md) (Fase 2, Tasks 8–14).

@@ -540,8 +540,13 @@ def _build_parameters_evacuacion(n_agents: int) -> dict:
             },
         })
 
+    # D25: el tiempo total escala con N para capacidades grandes (post-D24 el
+    # simulador sostiene evacuaciones completas hasta N~500). Para N<=120 es
+    # EXACTAMENTE EVAC_MAX_TIME=400 s (los puntos históricos no cambian); por
+    # encima crece con margen ~2x sobre el tiempo de vaciado medido.
+    max_time = max(EVAC_MAX_TIME, EVAC_MAX_TIME + (n_agents - 120) * 1.2)
     return {
-        "max_time": EVAC_MAX_TIME,
+        "max_time": max_time,
         "output_delta_time": 0.2,
         "blueprint_name": "escuela_evacuacion",
         "agents_generators": generators,

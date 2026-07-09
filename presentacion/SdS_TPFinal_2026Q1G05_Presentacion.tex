@@ -70,7 +70,7 @@
 % --- Links de YouTube/Vimeo a las animaciones. Editar cuando estén subidos. ---
 %     Si quedan vacíos, la slide muestra "[link pendiente]" en lugar del URL.
 \newcommand{\videolinkEvacBaja}{}     % evacuación, capacidad baja  (N = 40)
-\newcommand{\videolinkEvacAlta}{}     % evacuación, capacidad alta  (N = 120)
+\newcommand{\videolinkEvacAlta}{}     % evacuación, capacidad alta  (N = 500)
 \newcommand{\videolinkIngresoUno}{}   % ingreso, ventana de 1 minuto
 \newcommand{\videolinkIngresoDiez}{}  % ingreso, ventana de 10 minutos
 
@@ -333,7 +333,7 @@
     \item Los $N$ alumnos comienzan \textbf{dentro de las aulas} de ambas plantas y
       evacúan en \textbf{modo crisis} hacia las dos salidas; los de la planta alta bajan
       por las escaleras.
-    \item \textbf{Input}: la capacidad total $N \in \{40, 80, 120\}$.
+    \item \textbf{Input}: la capacidad total $N \in \{40, 80, 120, 200, 300, 400, 500\}$.
     \item \textbf{Observable}: la distribución de los tiempos de evacuación
       \begin{equation*}
         t_{\text{evac},i} \;=\; t_{\text{salida},i} - t_{\text{inicio},i}.
@@ -352,8 +352,8 @@
     \end{column}
     \begin{column}{0.5\textwidth}
       \centering
-      \simvideo{anim_evac_n120}{\videolinkEvacAlta}\\[1pt]
-      {\footnotesize Capacidad alta: $N=120$.}
+      \simvideo{anim_evac_n500}{\videolinkEvacAlta}\\[1pt]
+      {\footnotesize Capacidad alta: $N=500$.}
     \end{column}
   \end{columns}
 \end{frame}
@@ -364,8 +364,8 @@
   \begin{itemize}
     \item El lóbulo rápido es la \textbf{planta baja}; el lento, la \textbf{planta alta},
       que debe bajar la escalera a velocidad reducida.
-    \item Al crecer $N$, el lóbulo lento se desplaza a tiempos mayores y produce la cola
-      larga.
+    \item Al crecer $N$, el lóbulo lento se desplaza a tiempos mayores y se ensancha,
+      hasta dominar la distribución en las capacidades grandes.
   \end{itemize}
 \end{frame}
 
@@ -378,14 +378,13 @@
     \begin{column}{0.42\textwidth}
       \textbf{Observaciones}
       \begin{itemize}
-        \item Al triplicar la capacidad, el promedio pasa de $38.9\pm0.6$ a
-          $50.8\pm0.9$~s y el máximo de $57.0\pm1.5$ a $91.5\pm3.1$~s.
-        \item La dispersión entre realizaciones crece con $N$: más congestión, más
-          sensibilidad a la realización.
-        \item Barras de error: $\pm\,\sigma$ entre las 5 realizaciones (dentro del
-          marcador donde no se ven).
-        \item Queda $\approx 1$ agente por corrida sin evacuar: casi siempre el último
-          en tránsito a la salida (borde del criterio); la escalera fluye sin atascos.
+        \item El edificio se vacía completo en todo el rango: de $N=40$ a $500$ el
+          promedio pasa de $38.9\pm0.6$ a $108.7\pm3.2$~s.
+        \item Entre $N=200$ y $300$ el \textbf{máximo} salta de $129\pm9$ a
+          $244\pm103$~s: las escaleras pasan a trabajar \textbf{saturadas}.
+        \item La dispersión ($\pm\,\sigma$, 5 realizaciones) es máxima en ese cruce:
+          en $N=300$ un atasco transitorio estiró una realización a $427$~s.
+        \item Queda $\approx 1$ agente sin evacuar por corrida, constante en $N$.
       \end{itemize}
     \end{column}
   \end{columns}
@@ -501,9 +500,11 @@
   \end{columns}
   \vspace{2pt}
   \begin{itemize}
-    \item A ventana fija, se varía la cantidad total $N_{\max}\in\{60,120,180\}$.
-    \item Triplicar $N_{\max}$ multiplica el pico $\sim$11$\times$ ($4.6 \to 51.4$): la
-      ocupación crece \textbf{más que proporcionalmente} en el rango explorado.
+    \item A ventana fija, se varía la cantidad total $N_{\max}\in\{60,\dots,300\}$.
+    \item Hasta saturar el kiosco ($N_{\max}\approx 180$) el pico crece \textbf{más que
+      proporcionalmente} ($4.6 \to 51.4$, $\sim$11$\times$ al triplicar); después crece
+      $\sim$\textbf{linealmente} ($51.4 \to 78.8 \to 104.0$): el servidor saturado atiende a
+      tasa fija y el excedente se acumula en la cola.
   \end{itemize}
 \end{frame}
 

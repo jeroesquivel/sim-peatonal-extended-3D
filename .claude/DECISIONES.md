@@ -1128,3 +1128,30 @@ queda subusada — balancear la carga (malla más densa en áreas abiertas o cos
 queda como mejora opcional. **Los observables del informe cambian** (t_evac baja ~13% en N=120):
 si se adopta este fix para la entrega hay que re-correr los barridos de 5 semillas y actualizar
 informe + presentación.
+
+## D25 — Barrido de Evacuación extendido a N∈{40..500} y max_time escalado con N
+
+- **Fecha:** 2026-07-09
+- **Estado:** vigente
+- **Paso del plan:** post-D24 — actualización del análisis al rango que la implementación soporta
+
+**Contexto.** El barrido de Evacuación del informe llegaba a N=120. Ese techo era razonable con el
+simulador pre-D24 (a N≥300 el deadlock de boca de escalera invalidaba las corridas), pero post-D24
+el edificio se vacía completo hasta N≈500 (verificado en el stress-test), y el rango 40–120 ya no
+muestra el fenómeno más interesante: la **saturación de las escaleras** como cuello de botella del
+edificio.
+
+**Decisión.** (a) Barrido de Evacuación: N∈{40, 80, 120, 200, 300, 400, 500} × 5 semillas.
+(b) `build_escuela.py`: el `max_time` del modo evacuación escala con N —
+`max(400, 400 + (N−120)·1.2)` — para que las capacidades grandes tengan tiempo de vaciarse;
+para N≤120 es EXACTAMENTE 400 s (los puntos históricos no cambian). (c) Estudio complementario
+de Ingreso: Nmax∈{60, 120, 180, 240, 300} a Ta=5 min (a esa ventana el tope de spawn de las
+puertas no se activa; a Ta=1 min el input dejaría de ser entregable por encima de ~160, ver
+REPORTE_STRESS I025/I1x360).
+
+**Alternativas descartadas.** Incluir N=600–800: a N=800 la boca se arrastra sin completar el
+vaciado (límite documentado en D24) y el observable t_evac queda mal definido para los no
+evacuados; el barrido se corta donde las corridas completan la evacuación.
+
+**Impacto.** Informe y presentación re-escritos con el rango nuevo (tablas, figuras, análisis y
+conclusiones); heatmaps de evacuación regenerados.
