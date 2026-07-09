@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 
@@ -42,6 +43,20 @@ OUT_DIR = os.path.join(REPO_ROOT, "out")
 CP_FILE = os.path.join(OUT_DIR, ".cp.txt")
 CLASSES_DIR = os.path.join(REPO_ROOT, "target", "classes")
 MAIN_CLASS = "ar.edu.itba.simped.App"
+
+
+def _which_or_raise(cmd: str) -> str:
+    """Resuelve la ruta real del ejecutable (necesario en Windows: ``mvn`` es
+    en realidad ``mvn.cmd`` y ``subprocess`` sin ``shell=True`` no resuelve
+    extensiones de PATHEXT por sí solo)."""
+    path = shutil.which(cmd)
+    if path is None:
+        raise FileNotFoundError(f"no se encontró '{cmd}' en PATH")
+    return path
+
+
+MVN = _which_or_raise("mvn")
+JAVA = _which_or_raise("java")
 
 
 def _fmt_value(v: float) -> str:
@@ -57,13 +72,13 @@ def build_classpath() -> str:
     compile`` primero."""
     if not os.path.isdir(CLASSES_DIR):
         print("[sweep] target/classes no existe: corriendo 'mvn -q compile'...")
-        subprocess.run(["mvn", "-q", "compile"], cwd=REPO_ROOT, check=True)
+        subprocess.run([MVN, "-q", "compile"], cwd=REPO_ROOT, check=True)
 
     os.makedirs(OUT_DIR, exist_ok=True)
     print("[sweep] armando classpath (mvn dependency:build-classpath)...")
     subprocess.run(
         [
-            "mvn", "-q", "dependency:build-classpath",
+            MVN, "-q", "dependency:build-classpath",
             f"-Dmdep.outputFile={CP_FILE}",
         ],
         cwd=REPO_ROOT,
@@ -89,7 +104,7 @@ def gen_scenario(mode: str, value: float, scenario_dir: str) -> None:
 def run_simulation(classpath: str, scenario_dir: str, output_csv: str, seed: int, om: str) -> None:
     os.makedirs(os.path.dirname(output_csv), exist_ok=True)
     cmd = [
-        "java", f"-Dsimped.seed={seed}",
+        JAVA, f"-Dsimped.seed={seed}",
         "-cp", classpath,
         MAIN_CLASS,
         scenario_dir, output_csv, om,

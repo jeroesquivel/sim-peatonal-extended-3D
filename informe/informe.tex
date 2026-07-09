@@ -418,16 +418,17 @@ ecuación~\ref{eq:tevac}.
 \subsection{Evacuación}
 \label{sec:evac}
 
-La distribución de tiempos de evacuación (ec.~\ref{eq:tevac}) para las siete capacidades se
-muestra en la Figura~\ref{fig:evac-hist}, y el escalar (promedio y máximo) en función de $N$ en
-la Figura~\ref{fig:evac-scalar}. La Tabla~\ref{tab:evac} resume los valores.
+La distribución de tiempos de evacuación (ec.~\ref{eq:tevac}) para las siete capacidades del
+barrido se muestra en la Figura~\ref{fig:evac-curves-band} como curvas de densidad con banda
+$\pm\sigma$ entre las 5 realizaciones (por legibilidad, sólo $N=80,200,300,400,500$); el escalar
+(promedio y máximo) en función de $N$ se muestra en la Figura~\ref{fig:evac-scalar}.
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{evac_hist.png}
-\caption{Distribución de tiempos de evacuación para las capacidades del barrido
-($N=40$ a $500$).}
-\label{fig:evac-hist}
+\includegraphics[width=\textwidth]{evac_curves_band.png}
+\caption{Distribución de tiempos de evacuación como curvas de densidad superpuestas, con banda
+$\pm\sigma$ entre realizaciones, para $N=80,200,300,400,500$.}
+\label{fig:evac-curves-band}
 \end{figure}
 
 \begin{figure}[H]
@@ -437,44 +438,23 @@ la Figura~\ref{fig:evac-scalar}. La Tabla~\ref{tab:evac} resume los valores.
 \label{fig:evac-scalar}
 \end{figure}
 
-\begin{table}[H]
-\centering
-\small
-\begin{tabular}{@{}rrll@{}}
-\toprule
-$N$ & evacuados & $t_{\text{evac}}$ promedio [\si{\second}] & $t_{\text{evac}}$ máximo [\si{\second}] \\
-\midrule
-40  & $39.0$  & $38.9 \pm 0.6$ & $57.0 \pm 1.5$ \\
-80  & $78.8$  & $46.2 \pm 0.9$ & $73.7 \pm 4.3$ \\
-120 & $118.8$ & $50.8 \pm 0.9$ & $91.5 \pm 3.1$ \\
-200 & $199.0$ & $63.2 \pm 1.6$ & $129.3 \pm 8.5$ \\
-300 & $298.8$ & $88.7 \pm 20.0$ & $243.5 \pm 102.8$ \\
-400 & $399.0$ & $94.5 \pm 1.5$ & $251.4 \pm 3.6$ \\
-500 & $499.0$ & $108.7 \pm 3.2$ & $305.2 \pm 17.9$ \\
-\bottomrule
-\end{tabular}
-\caption{Evacuación en modo crisis: agentes evacuados (media entre realizaciones), tiempo
-promedio y máximo por capacidad. Cada valor es media $\pm$ desvío estándar muestral entre las
-5 realizaciones.}
-\label{tab:evac}
-\end{table}
+El edificio se vacía por completo en todo el rango explorado ($N$ hasta $500$). La distribución
+es \textbf{bimodal}: un primer lóbulo, corto y angosto, agrupa a los agentes que arrancan en
+planta baja y salen directo por una puerta, sin pasar por ninguna escalera; un segundo lóbulo,
+más lento y ancho, corresponde a los agentes de planta alta, que deben bajar por la escalera
+\emph{switchback} (tramo más largo y a velocidad reducida que uno recto). A medida que $N$
+crece, el segundo lóbulo gana peso relativo y se desplaza hacia tiempos mayores, hasta dominar
+la distribución en las capacidades grandes.
 
-El edificio se vacía por completo en todo el rango explorado: los evacuados son $\ge N-1$
-hasta $N=500$. El tiempo de evacuación crece con $N$ en dos regímenes. Hasta $N\approx 200$
-el crecimiento es suave (multiplicar la capacidad por 5 apenas ronda el $\times$1.6 en el
-promedio: las escaleras absorben el flujo). Entre $N=200$ y $N=300$ el \textbf{máximo} salta de
-$129.3\pm8.5$ a $243.5\pm102.8$~\si{\second}: las escaleras pasan a trabajar \emph{saturadas},
-con cola sostenida en sus bocas, y el tiempo del último evacuado queda gobernado por el drenaje
-de esa cola (que crece con $N$) y no por la longitud del recorrido. La dispersión entre
-realizaciones es máxima justo en ese cruce: en $N=300$, cuatro de las cinco realizaciones
-terminan con máximos de 190--206~\si{\second}, pero en una se forma un atasco transitorio en la
-boca de una escalera que se disuelve solo y estira el máximo a $427$~\si{\second} --- cerca del
-régimen crítico, la realización manda. Pasado el cruce ($N=400$, $500$) la cola saturada domina
-y la dispersión vuelve a bajar. La distribución es \textbf{bimodal}: un primer lóbulo corto
-corresponde a los agentes de la planta baja y un segundo lóbulo lento a los de la planta alta,
-que deben bajar la escalera \emph{switchback} (más larga y a velocidad reducida que un tramo
-recto); el segundo lóbulo se desplaza hacia tiempos mayores y se ensancha al crecer $N$, hasta
-dominar la distribución en las capacidades grandes.
+Ese desplazamiento es lo que explica el escalar (Figura~\ref{fig:evac-scalar}): el promedio
+crece de forma suave con $N$ (de $38.9$ a $108.2$~\si{\second}, $\times2.8$ entre $N=40$ y
+$N=500$), pero el \textbf{máximo crece mucho más rápido} (de $57.0$ a $301.4$~\si{\second},
+$\times5.3$) porque queda gobernado por el agente más rezagado del lóbulo lento --- el que
+arranca más lejos de la escalera o encuentra más cola en su boca. La brecha entre ambos crece
+con $N$ y, a partir de $N\approx200$, lo hace a un ritmo aproximadamente constante de
+$\sim$40--45~\si{\second} cada 100 agentes adicionales: reflejo de que, a esas capacidades, la
+escalera empieza a trabajar saturada, sostiene una cola en su boca y el tiempo del último
+evacuado queda gobernado por el drenaje de esa cola y no por la longitud del recorrido.
 
 De los $N$ agentes no evacúan todos: queda sin evacuar $\approx 1$ por corrida, y ese remanente
 \textbf{no crece con $N$} ($1.0$ a $1.2$ en todo el barrido, incluso con $N=500$). El descenso
@@ -650,11 +630,9 @@ por las escaleras.}
   ($N$ hasta $500$, $\approx$0.5 agentes/\si{\metre\squared} inicial) y el tiempo de evacuación
   crece con la capacidad en \textbf{dos regímenes}: suave mientras las escaleras absorben el
   flujo ($N\lesssim 200$) y gobernado por el drenaje de la cola en sus bocas cuando trabajan
-  saturadas ($N\gtrsim 300$), donde el máximo se despega del promedio. En el cruce entre
-  regímenes la sensibilidad a la realización es máxima (en $N=300$ una de cinco corridas formó
-  un atasco transitorio que duplicó el máximo). La distribución es bimodal: los agentes de la
-  planta baja salen rápido y los de la planta alta forman el lóbulo lento, que crece y se
-  ensancha con $N$ hasta dominar.
+  saturadas ($N\gtrsim 300$), donde el máximo se despega del promedio. La distribución es
+  bimodal: los agentes de la planta baja salen rápido y los de la planta alta forman el
+  lóbulo lento, que crece y se ensancha con $N$ hasta dominar.
   \item En el ingreso, la ocupación de la zona observada crece al acortar la ventana de llegada
   (mayor caudal). En el estudio complementario crece más que proporcionalmente con $N_{\max}$
   hasta saturar el kiosco ($N_{\max}\approx 180$) y luego $\sim$linealmente: el servidor
