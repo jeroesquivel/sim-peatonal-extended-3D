@@ -378,14 +378,14 @@
     \begin{column}{0.42\textwidth}
       \textbf{Observaciones}
       \begin{itemize}
-        \item Al triplicar la capacidad, el promedio pasa de $48.2\pm0.6$ a
-          $66.7\pm3.6$~s y el máximo de $93.5\pm3.2$ a $151.2\pm10.8$~s.
+        \item Al triplicar la capacidad, el promedio pasa de $38.9\pm0.6$ a
+          $50.8\pm0.9$~s y el máximo de $57.0\pm1.5$ a $91.5\pm3.1$~s.
         \item La dispersión entre realizaciones crece con $N$: más congestión, más
           sensibilidad a la realización.
         \item Barras de error: $\pm\,\sigma$ entre las 5 realizaciones (dentro del
           marcador donde no se ven).
-        \item Quedan $\approx 1.4$ agentes por corrida sin evacuar: \emph{livelock} contra
-          muros (boca de escalera de la planta alta, portón de salida).
+        \item Queda $\approx 1$ agente por corrida sin evacuar: casi siempre el último
+          en tránsito a la salida (borde del criterio); la escalera fluye sin atascos.
       \end{itemize}
     \end{column}
   \end{columns}
@@ -477,8 +477,8 @@
     \begin{column}{0.42\textwidth}
       \textbf{Observaciones}
       \begin{itemize}
-        \item Concentrar la llegada en \SI{1}{min} produce un pico de $53.4\pm1.8$
-          agentes; repartirla en \SI{10}{min} lo baja a $5.0\pm0.7$
+        \item Concentrar la llegada en \SI{1}{min} produce un pico de $53.0\pm2.1$
+          agentes; repartirla en \SI{10}{min} lo baja a $4.8\pm0.8$
           ($\sim$11$\times$ menos).
         \item Con la ventana de \SI{1}{min} la cola del kiosco no llega a drenarse en
           la corrida: el servidor queda \textbf{saturado}.
@@ -502,7 +502,7 @@
   \vspace{2pt}
   \begin{itemize}
     \item A ventana fija, se varía la cantidad total $N_{\max}\in\{60,120,180\}$.
-    \item Triplicar $N_{\max}$ multiplica el pico $\sim$11$\times$ ($4.8 \to 51.6$): la
+    \item Triplicar $N_{\max}$ multiplica el pico $\sim$11$\times$ ($4.6 \to 51.4$): la
       ocupación crece \textbf{más que proporcionalmente} en el rango explorado.
   \end{itemize}
 \end{frame}
@@ -535,9 +535,9 @@
     \item La \textbf{ocupación del kiosco crece al acortar la ventana de llegada} y, a
       ventana fija, crece más que proporcionalmente con la cantidad de alumnos, en el
       rango explorado.
-    \item Límite conocido: $\approx 1.4$ agentes por corrida no evacúan por el \emph{livelock}
-      de contacto con muros del modelo de fuerzas (reducido con el contacto al núcleo duro,
-      no eliminado).
+    \item Límite conocido: $\approx 1$ agente por corrida no evacúa (casi siempre el último
+      en tránsito; esporádicamente el \emph{livelock} de contacto con muros del CPM en un
+      portón de PB). El descenso por la escalera fluye sin atascos.
   \end{itemize}
 \end{frame}
 

@@ -438,9 +438,9 @@ la Figura~\ref{fig:evac-scalar}. La Tabla~\ref{tab:evac} resume los valores.
 \toprule
 $N$ & evacuados & $t_{\text{evac}}$ promedio [\si{\second}] & $t_{\text{evac}}$ máximo [\si{\second}] \\
 \midrule
-40  & $38.6$  & $48.2 \pm 0.6$ & $93.5 \pm 3.2$ \\
-80  & $78.4$  & $59.6 \pm 1.2$ & $121.6 \pm 4.2$ \\
-120 & $118.6$ & $66.7 \pm 3.6$ & $151.2 \pm 10.8$ \\
+40  & $39.0$  & $38.9 \pm 0.6$ & $57.0 \pm 1.5$ \\
+80  & $78.8$  & $46.2 \pm 0.9$ & $73.7 \pm 4.3$ \\
+120 & $118.8$ & $50.8 \pm 0.9$ & $91.5 \pm 3.1$ \\
 \bottomrule
 \end{tabular}
 \caption{Evacuación en modo crisis: agentes evacuados (media entre realizaciones), tiempo
@@ -450,25 +450,25 @@ promedio y máximo por capacidad. Cada valor es media $\pm$ desvío estándar mu
 \end{table}
 
 El tiempo de evacuación crece con $N$: al triplicar la capacidad el promedio pasa de
-$48.2\pm0.6$ a $66.7\pm3.6$~\si{\second} y el máximo de $93.5\pm3.2$ a
-$151.2\pm10.8$~\si{\second}. La dispersión entre realizaciones también crece con $N$ (más
+$38.9\pm0.6$ a $50.8\pm0.9$~\si{\second} y el máximo de $57.0\pm1.5$ a
+$91.5\pm3.1$~\si{\second}. La dispersión entre realizaciones también crece con $N$ (más
 congestión, más sensibilidad a la realización). La distribución es \textbf{bimodal}: un primer
 lóbulo corto corresponde a los agentes de la planta baja y un segundo lóbulo lento a los de la
 planta alta, que deben bajar la escalera \emph{switchback} (más larga y a velocidad reducida que
 un tramo recto); el segundo lóbulo se desplaza hacia tiempos mayores al crecer $N$ y produce la
 cola larga.
 
-De los $N$ agentes no evacúan todos: queda sin evacuar $\approx 1.4$ por corrida en promedio
-($1.4$, $1.6$ y $1.4$ para $N=40$, $80$ y $120$). La inspección de los cuadros finales muestra
-el \emph{livelock} de contacto con muros descripto en la Sección~\ref{sec:impl}: un agente
-aislado, cuya dirección deseada queda casi paralela a un muro, alterna entre el escape de
+De los $N$ agentes no evacúan todos: queda sin evacuar $\approx 1$ por corrida
+($1.0$, $1.2$ y $1.2$ para $N=40$, $80$ y $120$). El descenso por la escalera \emph{switchback}
+fluye sin atascos ---ningún agente queda retenido en la escalera ni en su boca---, de modo que
+el remanente es casi siempre el último agente todavía en tránsito hacia la salida en el instante
+en que termina la corrida (el output deja de escribir cuadros al vaciarse el edificio): un caso
+borde del criterio operativo de evacuado (ec.~\ref{eq:tevac}), no una evacuación fallida. De
+manera esporádica (dos agentes en una de las quince corridas) reaparece en la planta baja el
+\emph{livelock} de contacto con muros descripto en la Sección~\ref{sec:impl}: un agente aislado,
+cuya dirección deseada queda casi paralela a la jamba de un portón, alterna entre el escape de
 contacto y la atracción al objetivo, con velocidad instantánea $\sim v_d$ pero desplazamiento
-neto nulo. Tras endurecer el criterio de contacto, el atasco ya no ocurre en las puertas de
-aula: el remanente aparece en la boca de la escalera de la planta alta (el agente oscila contra
-la baranda del hueco sin iniciar el descenso) y, en menor medida, en la jamba del portón de
-salida de la planta baja. Es un agente aislado por punto de atasco, no congestión de la
-escalera. (En una de las quince corridas el ``rezagado'' era simplemente el último agente en
-tránsito hacia la salida, un caso borde del criterio operativo de evacuado.)
+neto nulo. Es siempre un agente aislado por punto de atasco, no congestión de la escalera.
 
 \subsection{Ingreso}
 \label{sec:ingreso}
@@ -500,9 +500,9 @@ resume los valores.
 \toprule
 $T_a$ [\si{\minute}] & $Q$ [ag./min] & Ocupación pico & Ocupación promedio \\
 \midrule
-1  & 120 & $53.4 \pm 1.8$ & $37.5 \pm 4.5$ \\
-5  & 24  & $21.0 \pm 3.6$ & $9.0 \pm 2.3$ \\
-10 & 12  & $5.0 \pm 0.7$  & $1.6 \pm 0.1$ \\
+1  & 120 & $53.0 \pm 2.1$ & $36.6 \pm 3.6$ \\
+5  & 24  & $21.0 \pm 3.6$ & $8.9 \pm 2.3$ \\
+10 & 12  & $4.8 \pm 0.8$  & $1.5 \pm 0.1$ \\
 \bottomrule
 \end{tabular}
 \caption{Ingreso: ocupación pico y promedio en la zona del kiosco por ventana de llegada $T_a$
@@ -511,12 +511,12 @@ $T_a$ [\si{\minute}] & $Q$ [ag./min] & Ocupación pico & Ocupación promedio \\
 \end{table}
 
 Con $N_{\max}$ fijo, cuanto más corta la ventana de llegada (mayor caudal $Q$), mayor la
-congestión. Concentrar 120 alumnos en \SI{1}{\minute} produce un pico de $53.4\pm1.8$ agentes en
-la zona, mientras que repartirlos en \SI{10}{\minute} lo baja a $5.0\pm0.7$ (una reducción de
+congestión. Concentrar 120 alumnos en \SI{1}{\minute} produce un pico de $53.0\pm2.1$ agentes en
+la zona, mientras que repartirlos en \SI{10}{\minute} lo baja a $4.8\pm0.8$ (una reducción de
 $\sim$11$\times$). La curva de población muestra el pico agudo y temprano de la ventana de
 \SI{1}{\minute} frente a la meseta baja y extendida de la de \SI{10}{\minute}: el mismo total de
 personas, distinta intensidad de aglomeración. Para la ventana de \SI{1}{\minute} la cola del
-kiosco no llega a drenarse dentro de la corrida ($\sim$31 agentes siguen en la zona al final):
+kiosco no llega a drenarse dentro de la corrida ($\sim$29 agentes siguen en la zona al final):
 el servidor queda saturado, otra manifestación de la misma congestión.
 
 \subsection{Estudio complementario: cantidad de agentes}
@@ -548,9 +548,9 @@ Figura~\ref{fig:nmax-scalar} y los valores en la Tabla~\ref{tab:nmax}.
 \toprule
 $N_{\max}$ & Ocupación pico & Ocupación promedio \\
 \midrule
-60  & $4.8 \pm 0.8$  & $1.2 \pm 0.2$ \\
-120 & $21.0 \pm 3.6$ & $9.0 \pm 2.3$ \\
-180 & $51.6 \pm 1.5$ & $30.6 \pm 2.1$ \\
+60  & $4.6 \pm 0.9$  & $1.1 \pm 0.2$ \\
+120 & $21.0 \pm 3.6$ & $8.9 \pm 2.3$ \\
+180 & $51.4 \pm 1.8$ & $30.6 \pm 2.1$ \\
 \bottomrule
 \end{tabular}
 \caption{Estudio complementario: ocupación pico y promedio en la zona del kiosco en función de
@@ -559,7 +559,7 @@ $N_{\max}$, con ventana fija de 5~minutos. Valores medios entre 5 realizaciones.
 \end{table}
 
 La ocupación crece más que proporcionalmente con $N_{\max}$ en el rango explorado: al triplicar
-la población el pico se multiplica por $\sim$11 ($4.8$, $21.0$ y $51.6$). La zona no absorbe el
+la población el pico se multiplica por $\sim$11 ($4.6$, $21.0$ y $51.4$). La zona no absorbe el
 flujo de forma proporcional, sino que se satura a medida que crece la cantidad de agentes.
 
 \subsection{Mapas de calor}
@@ -596,8 +596,8 @@ kiosco es el punto caliente.}
 \paragraph{Tiempos de evacuación por origen.}
 Se toma el punto de origen de cada agente (su primer cuadro) y se colorea la celda con el tiempo
 de evacuación medio de los agentes que arrancan ahí (Figura~\ref{fig:tevac}). Las aulas de la
-planta baja evacúan en $\sim$15--\SI{60}{\second} (mediana \SI{36}{\second}), mientras que las de
-la planta alta tardan $\sim$60--\SI{140}{\second} (mediana \SI{95}{\second}), porque deben bajar
+planta baja evacúan en $\sim$14--\SI{66}{\second} (mediana \SI{37}{\second}), mientras que las de
+la planta alta tardan $\sim$29--\SI{91}{\second} (mediana \SI{63}{\second}), porque deben bajar
 la escalera. El mapa cuantifica espacialmente el costo de estar en la planta alta.
 
 \begin{figure}[H]
@@ -625,10 +625,11 @@ por las escaleras.}
   crecer $N$.
   \item En el ingreso, la ocupación de la zona observada crece al acortar la ventana de llegada
   (mayor caudal) y, en el estudio complementario, crece más que proporcionalmente con $N_{\max}$.
-  \item En promedio $1.4$ agentes por corrida no evacúan, por el \emph{livelock} de contacto
-  con muros del modelo de fuerzas; el endurecimiento del criterio de contacto lo eliminó de las
-  puertas de aula, pero persiste en la boca de la escalera y en el portón de salida. Es un
-  límite conocido, reducido pero no eliminado.
+  \item En promedio $\approx 1$ agente por corrida no evacúa: casi siempre es el último agente
+  todavía en tránsito hacia la salida cuando termina la corrida (un caso borde del criterio de
+  evacuado) y, de forma esporádica, el \emph{livelock} de contacto con muros del modelo de
+  fuerzas en la jamba de un portón de la planta baja. El descenso por la escalera fluye sin
+  atascos; el remanente es un límite conocido del CPM, acotado a un agente aislado.
 \end{itemize}
 
 \begin{thebibliography}{9}
