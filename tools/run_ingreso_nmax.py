@@ -307,13 +307,13 @@ def main() -> None:
     fig2, ax2 = plt.subplots(figsize=(6.5, 4.5))
     if any_err:
         ax2.errorbar(scal_nmax, mean_mean, yerr=std_mean, marker="o", markersize=7,
-                     linestyle="none", capsize=4, color=_COLOR_PROM, label="promedio")
+                     linestyle="-", capsize=4, color=_COLOR_PROM, label="promedio")
         ax2.errorbar(scal_nmax, mean_peak, yerr=std_peak, marker="s", markersize=7,
-                     linestyle="none", capsize=4, color=_COLOR_MAX, label="máximo")
+                     linestyle="-", capsize=4, color=_COLOR_MAX, label="máximo")
     else:
-        ax2.plot(scal_nmax, mean_mean, marker="o", markersize=7, linestyle="none",
+        ax2.plot(scal_nmax, mean_mean, marker="o", markersize=7, linestyle="-",
                  color=_COLOR_PROM, label="promedio")
-        ax2.plot(scal_nmax, mean_peak, marker="s", markersize=7, linestyle="none",
+        ax2.plot(scal_nmax, mean_peak, marker="s", markersize=7, linestyle="-",
                  color=_COLOR_MAX, label="máximo")
     ax2.legend(frameon=False)
     ax2.set_xlabel("Nmax (agentes)")

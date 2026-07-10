@@ -518,16 +518,16 @@ def main() -> None:
     if ns_scalar:
         if any_err:
             ax2.errorbar(ns_scalar, mean_of_means, yerr=std_of_means, marker="o",
-                         markersize=7, linestyle="none", capsize=4, color=_COLOR_PROM,
+                         markersize=7, linestyle="-", capsize=4, color=_COLOR_PROM,
                          label="promedio")
             ax2.errorbar(ns_scalar, mean_of_maxs, yerr=std_of_maxs, marker="s",
-                         markersize=7, linestyle="none", capsize=4, color=_COLOR_MAX,
+                         markersize=7, linestyle="-", capsize=4, color=_COLOR_MAX,
                          label="máximo")
         else:
             # Todos los puntos con 1 sola semilla: sin yerr (convención cátedra).
-            ax2.plot(ns_scalar, mean_of_means, marker="o", markersize=7, linestyle="none",
+            ax2.plot(ns_scalar, mean_of_means, marker="o", markersize=7, linestyle="-",
                      color=_COLOR_PROM, label="promedio")
-            ax2.plot(ns_scalar, mean_of_maxs, marker="s", markersize=7, linestyle="none",
+            ax2.plot(ns_scalar, mean_of_maxs, marker="s", markersize=7, linestyle="-",
                      color=_COLOR_MAX, label="máximo")
     else:
         ax2.text(0.5, 0.5, "sin datos de evacuación", ha="center", va="center",

@@ -238,15 +238,15 @@ def main() -> None:
     any_err = any(s > 0 for s in std_of_peak + std_of_mean)
     if any_err:
         ax2.errorbar(win_scalar, mean_of_mean, yerr=std_of_mean, marker="o",
-                     markersize=7, linestyle="none", capsize=4, color=_COLOR_PROM,
+                     markersize=7, linestyle="-", capsize=4, color=_COLOR_PROM,
                      label="promedio")
         ax2.errorbar(win_scalar, mean_of_peak, yerr=std_of_peak, marker="s",
-                     markersize=7, linestyle="none", capsize=4, color=_COLOR_MAX,
+                     markersize=7, linestyle="-", capsize=4, color=_COLOR_MAX,
                      label="máximo")
     else:
-        ax2.plot(win_scalar, mean_of_mean, marker="o", markersize=7, linestyle="none",
+        ax2.plot(win_scalar, mean_of_mean, marker="o", markersize=7, linestyle="-",
                  color=_COLOR_PROM, label="promedio")
-        ax2.plot(win_scalar, mean_of_peak, marker="s", markersize=7, linestyle="none",
+        ax2.plot(win_scalar, mean_of_peak, marker="s", markersize=7, linestyle="-",
                  color=_COLOR_MAX, label="máximo")
     ax2.set_xlabel("ventana de llegada [min]")
     ax2.set_ylabel("ocupación de la zona [agentes]")

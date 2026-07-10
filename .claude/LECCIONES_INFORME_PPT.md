@@ -26,9 +26,13 @@
 - **Sin título matplotlib** cuando la figura va bajo un título de frame o un `\caption`:
   redunda. (Los identificadores de panel o de piso — "N=…", "PB (z=0)" — sí se quedan, no son
   título.)
-- **Escalares vs N / Nmax / Ta: marcador + barra de error, SIN polilínea** que una los puntos
-  (son valores discretos del input, no una curva). Usar `errorbar(..., linestyle="none",
-  capsize=4)`, no `linewidth`.
+- **Escalares vs N / Nmax / Ta: marcador + barra de error + línea recta "guía para el ojo"**
+  uniendo los puntos. La guía §2.4.6 la permite EXPLÍCITAMENTE ("pueden ser opcionalmente
+  unidos por líneas rectas como 'guía para el ojo'") siempre que los puntos estén marcados
+  (símbolo + barra de error). Usar `errorbar(..., linestyle="-", capsize=4)`. Lo único
+  prohibido es interpolar con **splines/polinomios** o unir sin marcar los puntos.
+  (Decisión 2026-07-09: se había quitado la línea de más; se revirtió a `linestyle="-"` en los
+  3 escalares — evac, ingreso, ingreso_nmax — a pedido del usuario.)
 
 ## Informe (estilo cátedra)
 - Sub-secciones **numeradas** (`\subsection`, no `\subsection*`).
