@@ -282,7 +282,6 @@ def main() -> None:
             single_seed_pts.append(nmax)
     ax1.set_xlabel("tiempo [s]")
     ax1.set_ylabel("agentes en la zona [agentes]")
-    ax1.set_title("Ingreso — población media±σ en la zona observada")
     ax1.grid(color=_COLOR_GRID, linewidth=0.8, zorder=0)
     ax1.set_axisbelow(True)
     for s in ("top", "right"):
@@ -308,18 +307,17 @@ def main() -> None:
     fig2, ax2 = plt.subplots(figsize=(6.5, 4.5))
     if any_err:
         ax2.errorbar(scal_nmax, mean_mean, yerr=std_mean, marker="o", markersize=7,
-                     linewidth=2, capsize=4, color=_COLOR_PROM, label="promedio")
+                     linestyle="none", capsize=4, color=_COLOR_PROM, label="promedio")
         ax2.errorbar(scal_nmax, mean_peak, yerr=std_peak, marker="s", markersize=7,
-                     linewidth=2, capsize=4, color=_COLOR_MAX, label="máximo")
+                     linestyle="none", capsize=4, color=_COLOR_MAX, label="máximo")
     else:
-        ax2.plot(scal_nmax, mean_mean, marker="o", markersize=7, linewidth=2,
+        ax2.plot(scal_nmax, mean_mean, marker="o", markersize=7, linestyle="none",
                  color=_COLOR_PROM, label="promedio")
-        ax2.plot(scal_nmax, mean_peak, marker="s", markersize=7, linewidth=2,
+        ax2.plot(scal_nmax, mean_peak, marker="s", markersize=7, linestyle="none",
                  color=_COLOR_MAX, label="máximo")
     ax2.legend(frameon=False)
     ax2.set_xlabel("Nmax (agentes)")
     ax2.set_ylabel("ocupación de la zona [agentes]")
-    ax2.set_title("Ocupación máxima y promedio vs. Nmax")
     ax2.grid(color=_COLOR_GRID, linewidth=0.8, zorder=0)
     ax2.set_axisbelow(True)
     for s in ("top", "right"):

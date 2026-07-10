@@ -215,7 +215,6 @@ def plot_hist(
             ax.spines[spine].set_visible(False)
     for ax in axes_flat[len(ns_ok):]:
         ax.axis("off")
-    fig.suptitle("Distribución de tiempos de evacuación", fontsize=13)
     sm = ScalarMappable(norm=norm, cmap=_CMAP)
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=axes.ravel().tolist(), fraction=0.025, pad=0.02)
@@ -269,7 +268,6 @@ def plot_hist_same_scale(
             ax.spines[spine].set_visible(False)
     for ax in axes_flat[len(ns_ok):]:
         ax.axis("off")
-    fig.suptitle("Distribución de tiempos de evacuación (escala común entre paneles)", fontsize=13)
     sm = ScalarMappable(norm=norm, cmap=_CMAP)
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=axes.ravel().tolist(), fraction=0.025, pad=0.02)
@@ -320,7 +318,6 @@ def plot_curves_overlay(
                 label=f"N={n}")
     ax.set_xlabel("tiempo de evacuación [s]")
     ax.set_ylabel("densidad de probabilidad")
-    ax.set_title("Distribución de tiempos de evacuación por N (curvas superpuestas)")
     ax.grid(color=_COLOR_GRID, linewidth=0.8, zorder=0)
     ax.set_axisbelow(True)
     for spine in ("top", "right"):
@@ -400,7 +397,6 @@ def plot_curves_band(
             single_seed_ns.append(n)
     ax.set_xlabel("tiempo de evacuación [s]")
     ax.set_ylabel("densidad de probabilidad")
-    ax.set_title("Distribución de tiempos de evacuación por N (curvas + banda ±σ entre seeds)")
     ax.grid(color=_COLOR_GRID, linewidth=0.8, zorder=0)
     ax.set_axisbelow(True)
     for spine in ("top", "right"):
@@ -522,23 +518,22 @@ def main() -> None:
     if ns_scalar:
         if any_err:
             ax2.errorbar(ns_scalar, mean_of_means, yerr=std_of_means, marker="o",
-                         markersize=7, linewidth=2, capsize=4, color=_COLOR_PROM,
+                         markersize=7, linestyle="none", capsize=4, color=_COLOR_PROM,
                          label="promedio")
             ax2.errorbar(ns_scalar, mean_of_maxs, yerr=std_of_maxs, marker="s",
-                         markersize=7, linewidth=2, capsize=4, color=_COLOR_MAX,
+                         markersize=7, linestyle="none", capsize=4, color=_COLOR_MAX,
                          label="máximo")
         else:
             # Todos los puntos con 1 sola semilla: sin yerr (convención cátedra).
-            ax2.plot(ns_scalar, mean_of_means, marker="o", markersize=7, linewidth=2,
+            ax2.plot(ns_scalar, mean_of_means, marker="o", markersize=7, linestyle="none",
                      color=_COLOR_PROM, label="promedio")
-            ax2.plot(ns_scalar, mean_of_maxs, marker="s", markersize=7, linewidth=2,
+            ax2.plot(ns_scalar, mean_of_maxs, marker="s", markersize=7, linestyle="none",
                      color=_COLOR_MAX, label="máximo")
     else:
         ax2.text(0.5, 0.5, "sin datos de evacuación", ha="center", va="center",
                  color=_COLOR_MUTED, transform=ax2.transAxes)
     ax2.set_xlabel("N (agentes)")
     ax2.set_ylabel("tiempo de evacuación [s]")
-    ax2.set_title("Tiempo de evacuación promedio y máximo vs. N")
     ax2.grid(color=_COLOR_GRID, linewidth=0.8, zorder=0)
     ax2.set_axisbelow(True)
     for spine in ("top", "right"):

@@ -52,7 +52,7 @@
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc}
 \usepackage{hyperref}
-\usepackage{media9}   % video embebido en el PDF (reproduce inline en Adobe Acrobat/Reader)
+\usepackage{multimedia}   % \movie: video linkeado desde videos/; pympress lo reproduce con autoplay/loop (en Adobe Reader reproduce embebido)
 \usepackage[absolute,overlay]{textpos}  % anclaje absoluto de la cita (ver \fuente)
 \graphicspath{{figuras/}}
 \sisetup{output-decimal-marker={.}}
@@ -69,17 +69,21 @@
 
 % --- Links de YouTube/Vimeo a las animaciones. Editar cuando estén subidos. ---
 %     Si quedan vacíos, la slide muestra "[link pendiente]" en lugar del URL.
-\newcommand{\videolinkEvacBaja}{}     % evacuación, capacidad baja  (N = 40)
-\newcommand{\videolinkEvacAlta}{}     % evacuación, capacidad alta  (N = 500)
-\newcommand{\videolinkIngresoUno}{}   % ingreso, ventana de 1 minuto
-\newcommand{\videolinkIngresoDiez}{}  % ingreso, ventana de 10 minutos
+%     Se definen con catcode `_`=12 para que los guiones bajos de los IDs de
+%     YouTube no rompan \href/\url (hyperref). Usar \gdef (global) por el grupo.
+\begingroup\catcode`\_=12\relax
+\gdef\videolinkEvacBaja{https://youtu.be/GSnIwkEzUjQ}%   evacuación, capacidad baja  (N = 40)
+\gdef\videolinkEvacAlta{https://youtu.be/9H_JlijpAMA}%   evacuación, capacidad alta  (N = 500)
+\gdef\videolinkIngresoUno{https://youtu.be/_g14NaB1mp8}% ingreso, ventana de 1 minuto
+\gdef\videolinkIngresoDiez{https://youtu.be/9h85AAXzKDo}% ingreso, ventana de 10 minutos
+\endgroup
 
 % --- Modo de compilación (lo fija el driver tpfinal_presentable.tex vía
 %     \PRESENTABLEMODE; por defecto, compilando este archivo solo, es ENTREGABLE):
 %       ENTREGABLE  : \embedvideofalse + \showlinktrue  -> fotograma clickeable
 %                     (abre el link) + URL de YouTube visible debajo. Liviano.
-%       PRESENTABLE : \embedvideotrue  + \showlinkfalse -> .mp4 embebido (media9,
-%                     reproduce inline en Acrobat), SIN URL en pantalla. ---
+%       PRESENTABLE : \embedvideotrue  + \showlinkfalse -> .mp4 vía \movie
+%                     (multimedia; pympress lo reproduce), SIN URL en pantalla. ---
 \newif\ifembedvideo
 \newif\ifshowlink
 \ifdefined\PRESENTABLEMODE
@@ -100,12 +104,12 @@
   \begin{minipage}{\linewidth}\centering
     \edef\sv@link{#2}% expandimos el link (puede ser un macro vacío)
     \ifembedvideo
-      \includemedia[
-        activate=onclick,
-        width=1.0115\vidH,height=\vidH,
-        addresource=videos/#1.mp4,
-        flashvars={source=videos/#1.mp4}
-      ]{\includegraphics[width=1.0115\vidH,height=\vidH]{videos/#1.png}}{videos/#1.mp4}%
+      % \movie (paquete multimedia, mismo método que TP3/TP4/TP5): pympress
+      % reproduce videos/#1.mp4 con autostart/loop sobre el póster. El .mp4 se
+      % linkea por ruta relativa -> la carpeta videos/ debe ir JUNTO al PDF.
+      \movie[autostart,loop,width=1.0115\vidH,height=\vidH,poster]{%
+        \includegraphics[width=1.0115\vidH,height=\vidH]{videos/#1.png}%
+      }{videos/#1.mp4}%
     \else
       \ifx\sv@link\@empty
         \includegraphics[height=\vidH,keepaspectratio]{videos/#1.png}%
@@ -145,7 +149,7 @@
 }
 
 % =============================================================================
-\section{Ampliación 3D}
+\section{Introducción}
 
 \begin{frame}[plain,c]
   \centering
@@ -164,10 +168,9 @@
           coordenada $z$.
         \item La $z$ representa la \textbf{planta} del agente, y su altura intermedia
           mientras recorre una escalera.
-        \item Enfoque \textbf{híbrido}: posiciones y velocidades pasan a 3D, pero la
-          dinámica sigue siendo \textbf{planar} en cada planta (evita reescribir la física
-          planar y que la $z$ se mueva por fuerzas del plano); la $z$ se interpola por
-          el avance sobre la escalera (no hay $v_z$).
+        \item Enfoque \textbf{híbrido}: las posiciones pasan a 3D, pero la dinámica sigue
+          \textbf{planar} en cada planta; la $z$ se interpola por el avance sobre la
+          escalera (no hay $v_z$).
       \end{itemize}
     \end{column}
     \begin{column}{0.36\textwidth}
@@ -192,6 +195,14 @@
     Martin \& Parisi (2024), A-CPM}
 \end{frame}
 
+% =============================================================================
+\section{Implementación}
+
+\begin{frame}[plain,c]
+  \centering
+  {\usebeamercolor[fg]{structure}\fontsize{40}{48}\selectfont Implementación\par}
+\end{frame}
+
 \begin{frame}[c]{Qué cambió en cada módulo, y por qué}
   \footnotesize
   \begin{center}
@@ -207,7 +218,7 @@
       A* con heurística euclídea 3D; visibilidad por planta.
       & Una losa tapa la línea de vista entre plantas. \\
     Vecinos (CIM) & Una grilla por planta + índice ``puente'' en la escalera; paredes y
-      vértices como vecinos. & El enunciado pide vecindad por planta. \\
+      vértices como vecinos. & La vecindad es local a cada planta. \\
     Física (CPM) & Planar en la planta actual; en la escalera, velocidad reducida e
       interpolación de $z$. & La dinámica peatonal ocurre en el plano. \\
     Salida y animación & Columna $z$ en la salida; animación 2D por planta + vista 3D a
@@ -240,22 +251,16 @@
 
 \begin{frame}[c]{Lo que sólo aparece con dos plantas reales}
   \begin{itemize}
-    \item \textbf{Verde en aislamiento, roto en integración}: cada módulo pasaba sus
-      tests, pero el primer escenario real de dos plantas destapó caminos donde la $z$ se
-      perdía \emph{en silencio} (tareas, servers y generadores nacían o apuntaban a
-      $z=0$): nadie subía a la planta alta, y sin un solo \emph{crash}.
-    \item \textbf{El ruteo se quedaba al pie} de la escalera (el tope ``no es visible''
-      desde otra planta) $\Rightarrow$ se cruza explícitamente la \textbf{arista de
-      escalera}.
-    \item \textbf{Salto de $z$ al pie}: se excluyó la huella de la escalera de la grilla
-      del grafo y el cambio de \emph{hop} se hace pegado al extremo, para que la $z$
-      enganche desde el nivel del piso.
-    \item \textbf{Livelock en jambas de puerta}: el contacto con pared al radio expandido
-      disparaba un escape que peleaba con el objetivo $\Rightarrow$ contacto sólo al
-      núcleo duro ($r_{\min}$); la repulsión suave dobla esquinas sin oscilar.
-    \item \textbf{Lección}: al agregar una coordenada hay que auditar \emph{todos} los
-      caminos de datos; los \emph{defaults} silenciosos dan simulaciones plausibles pero
-      erróneas.
+    \item \textbf{Verde en aislamiento, roto en integración}: la $z$ se perdía \emph{en
+      silencio} y nadie subía a la planta alta, sin un solo \emph{crash}.
+    \item \textbf{El ruteo se quedaba al pie} de la escalera $\Rightarrow$ se cruza
+      explícito la \textbf{arista de escalera}.
+    \item \textbf{Salto de $z$ al pie}: la escalera queda fuera de la grilla y el cambio de
+      \emph{hop} va pegado al extremo.
+    \item \textbf{Livelock en jambas}: el contacto pasa a ser sólo al núcleo duro
+      ($r_{\min}$); la repulsión suave dobla esquinas sin oscilar.
+    \item \textbf{Lección}: al sumar una coordenada, auditar \emph{todos} los caminos de
+      datos; los \emph{defaults} silenciosos engañan.
   \end{itemize}
 \end{frame}
 
@@ -361,8 +366,7 @@
 \begin{frame}[c]{La distribución de tiempos de evacuación es bimodal}
   \centering
   \includegraphics[width=0.95\linewidth,height=0.5\textheight,keepaspectratio]{evac_curves_band.png}\\[2pt]
-  {\footnotesize Curvas de densidad con banda $\pm\sigma$ entre 5 realizaciones (por
-    legibilidad, sólo $N=80,200,300,400,500$).}
+  {\footnotesize Densidad con banda $\pm\sigma$ (subconjunto de $N$).}
   \begin{itemize}
     \item El lóbulo rápido es la \textbf{planta baja}; el lento, la \textbf{planta alta},
       que debe bajar la escalera a velocidad reducida.
@@ -382,9 +386,9 @@
       \textbf{Observaciones}
       \begin{itemize}
         \item El edificio se vacía completo en todo el rango: de $N=40$ a $500$
-          el promedio pasa de $38.9$ a $108.2$~s ($\times2.8$).
-        \item El \textbf{máximo} crece más rápido, de $57.0$ a $301.4$~s
-          ($\times5.3$): lo gobierna el agente más rezagado del lóbulo lento.
+          el promedio pasa de $38.9$ a $108.7$~s ($\times2.8$).
+        \item El \textbf{máximo} crece más rápido, de $57.0$ a $305.2$~s
+          ($\times5.4$): lo gobierna el agente más rezagado del lóbulo lento.
         \item Desde $N\approx200$ la brecha promedio--máximo crece a ritmo
           casi constante ($\sim$40--45~s cada 100 agentes): la escalera trabaja
           \textbf{saturada}, con cola en su boca.
@@ -400,14 +404,12 @@
     \begin{column}{0.5\textwidth}
       \centering
       \includegraphics[width=\linewidth]{heatmap_densidad_evac.png}\\[2pt]
-      {\footnotesize Densidad de ocupación: el pasillo central y las escaleras
-        concentran el flujo.}
+      {\footnotesize Densidad de ocupación.}
     \end{column}
     \begin{column}{0.5\textwidth}
       \centering
       \includegraphics[width=\linewidth]{heatmap_tevac.png}\\[2pt]
-      {\footnotesize $t_{\text{evac}}$ medio según el origen: la planta alta evacúa
-        mucho más lento (baja por escalera).}
+      {\footnotesize $t_{\text{evac}}$ medio por origen.}
     \end{column}
   \end{columns}
 \end{frame}
@@ -429,7 +431,7 @@
       $Q = N_{\max}/T_a \in \{120, 24, 12\}$ agentes/min.
     \item \textbf{Observable}: la población en la zona del kiosco
       \begin{equation*}
-        n_{\text{zona}}(t) \;=\; \bigl|\{\, i : (x_i(t), y_i(t)) \in R \,\}\bigr|,
+        n_{\text{zona}}(t) \;=\; \bigl|\{\, i : (x_i(t), y_i(t)) \in R,\; z_i(t) \approx 0 \,\}\bigr|,
         \qquad R = \text{frente del kiosco (planta baja)}.
       \end{equation*}
     \item \textbf{Escalares}: ocupación \textbf{máxima} y \textbf{promedio} de la zona.
@@ -505,19 +507,16 @@
   \end{columns}
   \vspace{2pt}
   \begin{itemize}
-    \item A ventana fija, se varía la cantidad total $N_{\max}\in\{60,\dots,300\}$.
-    \item Hasta saturar el kiosco ($N_{\max}\approx 180$) el pico crece \textbf{más que
-      proporcionalmente} ($4.6 \to 51.4$, $\sim$11$\times$ al triplicar); después crece
-      $\sim$\textbf{linealmente} ($51.4 \to 78.8 \to 104.0$): el servidor saturado atiende a
-      tasa fija y el excedente se acumula en la cola.
+    \item A ventana fija ($N_{\max}\in\{60,\dots,300\}$): el pico crece \textbf{más que
+      proporcionalmente} hasta saturar el kiosco ($N_{\max}\approx 180$) y luego
+      $\sim$\textbf{linealmente}.
   \end{itemize}
 \end{frame}
 
 \begin{frame}[c]{La huella espacial del ingreso}
   \centering
   \includegraphics[width=0.8\linewidth,height=0.68\textheight,keepaspectratio]{heatmap_densidad_ingreso.png}\\[3pt]
-  {\footnotesize Densidad de ocupación durante el ingreso: la cola del kiosco es el punto
-    caliente; pasillos y entradas quedan mucho más tenues.}
+  {\footnotesize Densidad de ocupación durante el ingreso.}
 \end{frame}
 
 % =============================================================================

@@ -166,9 +166,9 @@ def render(scenario: str, output: str, out: str, fps: int, dpi: int, elev: float
         ax.set_ylim(min(ys), max(ys))
     if floors:
         ax.set_zlim(min(floors) - 0.5, max(floors) + 1.0)
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("z (planta)")
+    ax.set_xlabel("x [m]")
+    ax.set_ylabel("y [m]")
+    ax.set_zlabel("z [m] (planta)")
 
     scatter = ax.scatter([], [], [], s=25, depthshade=True)
     title = ax.set_title("")

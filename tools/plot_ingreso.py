@@ -202,7 +202,6 @@ def main() -> None:
             ax.fill_between(times_ref, lo, hi, color=color, alpha=0.18, linewidth=0)
     ax.set_xlabel("tiempo [s]")
     ax.set_ylabel("agentes en la zona [agentes]")
-    ax.set_title("Población vs. tiempo en la zona de congestión del ingreso")
     ax.grid(color=_COLOR_GRID, linewidth=0.8, zorder=0)
     ax.set_axisbelow(True)
     for spine in ("top", "right"):
@@ -239,19 +238,18 @@ def main() -> None:
     any_err = any(s > 0 for s in std_of_peak + std_of_mean)
     if any_err:
         ax2.errorbar(win_scalar, mean_of_mean, yerr=std_of_mean, marker="o",
-                     markersize=7, linewidth=2, capsize=4, color=_COLOR_PROM,
+                     markersize=7, linestyle="none", capsize=4, color=_COLOR_PROM,
                      label="promedio")
         ax2.errorbar(win_scalar, mean_of_peak, yerr=std_of_peak, marker="s",
-                     markersize=7, linewidth=2, capsize=4, color=_COLOR_MAX,
+                     markersize=7, linestyle="none", capsize=4, color=_COLOR_MAX,
                      label="máximo")
     else:
-        ax2.plot(win_scalar, mean_of_mean, marker="o", markersize=7, linewidth=2,
+        ax2.plot(win_scalar, mean_of_mean, marker="o", markersize=7, linestyle="none",
                  color=_COLOR_PROM, label="promedio")
-        ax2.plot(win_scalar, mean_of_peak, marker="s", markersize=7, linewidth=2,
+        ax2.plot(win_scalar, mean_of_peak, marker="s", markersize=7, linestyle="none",
                  color=_COLOR_MAX, label="máximo")
     ax2.set_xlabel("ventana de llegada [min]")
     ax2.set_ylabel("ocupación de la zona [agentes]")
-    ax2.set_title("Ocupación máxima y promedio vs. caudal")
     ax2.grid(color=_COLOR_GRID, linewidth=0.8, zorder=0)
     ax2.set_axisbelow(True)
     for spine in ("top", "right"):

@@ -19,8 +19,10 @@ escaleras**, es decir, llevarlo a 3D. Ver el enunciado completo en
    cualquier módulo. Tratar esas menciones como ruido histórico, no como restricciones de
    propiedad. El inventario de esos rastros está en
    [`.claude/LIMPIEZA_RASTROS_GRUPOS.md`](./LIMPIEZA_RASTROS_GRUPOS.md) para limpiarlos.
-3. **Usar siempre CPM** (Contractile Particle Model) como modelo físico. SFM existe pero no
-   se usa en este TP (`SfmaOperationalModel` puede ignorarse/eliminarse).
+3. **Usar siempre CPM** (Contractile Particle Model) como modelo físico. El SFM fue
+   **eliminado** del código (D7): ya no existe `SfmaOperationalModel` y `App` construye
+   siempre `CpmOperationalModel`. El argumento CLI `om` se conserva por compatibilidad, pero
+   cualquier valor resuelve a CPM.
 4. **Registrar todas las decisiones en [`.claude/DECISIONES.md`](./DECISIONES.md).** Es la
    fuente de verdad de las decisiones de arquitectura del TP. Reglas:
    - **Consultar `DECISIONES.md` antes de realizar cualquier cambio en la arquitectura del
@@ -50,9 +52,9 @@ App <scenarioDir> <outputFile> [om]
 
 - `scenarioDir` — directorio del escenario (default `scenarios/example`).
 - `outputFile`  — CSV de salida (default `out/output.csv`).
-- `om`          — modelo: `cpm` o `sfm`. **Para este TP usar siempre `cpm`** (también vía
-  env var `SIMPED_OM=cpm`). El default actual del código es `sfm`; conviene cambiarlo a
-  `cpm` o pasarlo explícito.
+- `om`          — vestigial tras D7 (SFM eliminado). Prioridad de lectura: arg posicional >
+  env var `SIMPED_OM` > default `cpm`, pero `App` **siempre** construye CPM sin importar el
+  valor. Se mantiene por compatibilidad de CLI.
 
 Correr (el escenario `example` es Formato A puro CSV y no necesita Jackson):
 
@@ -134,7 +136,7 @@ Servers, harvest de agentes DEAD, output cada `dtOut`.
 | `agent/sensors/` | `Sensors` | Detección de arrival/approach |
 | `agent/statemachine/` | `StateMachine` | Behavior state + foot-target |
 | `agent/preom/` | `PreOM` | Ruteo (consulta al Graph) |
-| `agent/om/` | `OperationalModel` | Física (CPM / SFM) |
+| `agent/om/` | `OperationalModel` | Física (CPM — único modelo; SFM eliminado, D7) |
 | `environment/geometry/` | `Geometry` | Walls, Locations, Exits, GeneratorZones, ServerZones |
 | `environment/graph/` | `Graph` | Malla de navegación + A* + Furthest Visible Point |
 | `environment/neighbors/` | `NeighborsIndex` | CIM (Cell Index Method) |
@@ -295,7 +297,25 @@ sirven de referencia de cómo se generan los CSV, pero **no forman parte de este
 
 ## Estado del trabajo y pendientes (retomar acá)
 
-**Última sesión: 2026-07-09 (D25: re-análisis al rango post-D24).** Con el fix D24 el barrido
+**Última sesión: 2026-07-09 (videos a YouTube + links en la ppt).** Se completó el pendiente de
+video de la presentación:
+- **`anim_evac_n500.mp4` renderizado** — la nota previa decía "MP4 regenerados (incluye
+  anim_evac_n500)" pero el `.mp4` **no existía** (solo estaba el `.png`). Se generó desde
+  `out/sweeps/evacuacion/v500/seed1/output.csv` con
+  `tools/visualize_simulation_3d.py --stride 4 --dpi 110` (389 frames, 1.0 MB), mismos parámetros
+  que los otros evac.
+- **4 links de YouTube cargados** en los macros `\videolink*` de
+  `presentacion/SdS_TPFinal_2026Q1G05_Presentacion.tex` (son **4**, no 5 — `anim_evac_n120.mp4`
+  quedó como sobrante sin referenciar): EvacBaja=`youtu.be/GSnIwkEzUjQ` (n40),
+  EvacAlta=`youtu.be/9H_JlijpAMA` (n500), IngresoUno=`youtu.be/_g14NaB1mp8` (t1),
+  IngresoDiez=`youtu.be/9h85AAXzKDo` (t10). Dos IDs tienen `_`, que rompe `\href`/`\url`; se
+  definieron dentro de un grupo con ``\catcode`\_=12`` + `\gdef` (ver cabecera del `.tex`).
+- **Ambos PDFs recompilados** (entregable + `tpfinal_presentable`, 2 pasadas c/u, exit 0, sin
+  errores). Verificado: los 4 links aparecen en el texto del PDF entregable y cero
+  "[link pendiente]". Auxiliares de LaTeX borrados.
+- **Falta (usuario):** wiki, ensayo (~13 min) y **commit** (regla 1). Los links ya no son pendiente.
+
+**Sesión 2026-07-09 (D25: re-análisis al rango post-D24).** Con el fix D24 el barrido
 N≤120 quedó corto: se extendió Evacuación a **N∈{40,80,120,200,300,400,500}×5 seeds** (max_time
 escala con N en el builder, D25) y el complementario a **Nmax∈{60..300}×5**. Resultados nuevos:
 evacuación completa en todo el rango (evacuados ≥N−1 hasta 500); **dos regímenes** (suave hasta
@@ -305,8 +325,8 @@ Nmax: supralineal hasta saturar el kiosco (~180) y ~lineal después (78.8±2.3 /
 240/300). Ingreso principal: idéntico (kiosco-dominado). Informe **15 páginas** (tablas 7/5 filas,
 análisis de regímenes, conclusiones) y ppt **26 páginas** actualizados (barrido {40..500}, anim
 "alta"=N500 nueva, hist de slide con subset {40,120,500} vía `plot_evacuacion --values`, hspace
-fix en el histograma). MP4 de presentacion/videos regenerados (incluye anim_evac_n500). Suite 143
-verdes. **Falta (usuario):** subir los 5 MP4 a YouTube + links `\videolink*`, wiki, ensayo, commit.
+fix en el histograma). Suite 143 verdes. **Videos/links: ya resueltos** (ver nota de sesión al
+tope). **Falta (usuario):** wiki, ensayo, commit.
 
 **Sesión 2026-07-07 (informe + ppt: cambios del simulador y porqués).** La fuente de verdad
 de las decisiones es [`DECISIONES.md`](./DECISIONES.md) (**D1–D23**); la auditoría contra la wiki
@@ -421,8 +441,10 @@ de la Escuela, parametrizar el builder (`build_escuela.py`) para los dos casos d
 - **Ingreso** — input: caudal (los `Nmax` agentes distribuidos en **1 / 5 / 10 min**); observable:
   **población vs. tiempo** en una zona (p. ej. antes de una escalera principal); escalar: ocupación
   máxima/promedio. Acá el kiosco del recreo entra naturalmente en el plan.
-- Falta además: scripts de **barrido** (variar `N` / caudal, varias corridas) y de **gráficos** de los
-  observables/escalares. (No hay aún infra de barrido; crearla en `tools/`.)
+- Scripts de **barrido** y **gráficos** (variar `N` / caudal, varias corridas): ✅ **ya existen**
+  en `tools/` — `sweep_run.py` + `sweep_lib.py` (motor de barrido con semillas),
+  `plot_evacuacion.py` / `plot_ingreso.py` (observables/escalares) y `run_ingreso_nmax.py`
+  (barrido de `Nmax`). Ver el estado 2026-07-09 al pie para los rangos ya corridos.
 
 **Notas para retomar:**
 - Formato B (Escuela) **necesita Jackson** → correr con `mvn exec:java` (no el `-jar`, que no es

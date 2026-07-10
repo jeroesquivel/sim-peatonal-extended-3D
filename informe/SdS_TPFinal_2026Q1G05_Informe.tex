@@ -2,7 +2,7 @@
 
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage[spanish,es-noshorthands]{babel}
+\usepackage[spanish,es-noshorthands,es-tabla]{babel}
 \usepackage{lmodern}
 \usepackage{microtype}
 \usepackage[a4paper,margin=2.4cm]{geometry}
@@ -71,6 +71,9 @@ grafo y la salida respeten la coordenada $z$. La $z$ representa la planta del ag
 altura intermedia mientras recorre una escalera; la escalera es el elemento nuevo que conecta
 plantas.
 
+\section{Modelo}
+\label{sec:modelo}
+
 La dinámica peatonal se resuelve con el \textbf{Contractile Particle Model} (CPM)
 \cite{baglietto2011}, en la variante anisotrópica con evitación (A-CPM) de Martin y
 Parisi~\cite{martin2024}. El CPM es un modelo de partículas de radio variable: cada agente
@@ -79,9 +82,9 @@ apunta al objetivo con maniobras angulares de evitación. La dinámica es planar
 la $z$ no es un grado de libertad dinámico, sino que se interpola por el avance del agente a
 lo largo del tramo de escalera.
 
-Sobre esta ampliación se estudia el escenario \emph{Escuela}. En ambos sub-escenarios se varía
-un \emph{input} y se mide un \emph{observable}. Antes de presentar los resultados definimos los
-observables.
+Sobre esta ampliación se estudia el escenario \emph{Escuela}, en el que cada sub-escenario varía
+un \emph{input} y mide un \emph{observable}. Definimos a continuación los tres observables que se
+usan en los resultados.
 
 \paragraph{Tiempo de evacuación.}
 Para el agente $i$, el tiempo de evacuación es
@@ -106,7 +109,7 @@ es decir la cantidad de agentes cuya proyección $(x,y)$ cae dentro de $R$ en el
 
 \paragraph{Caudal de ingreso.}
 El input del Ingreso es la \textbf{ventana de llegada} $T_a$: los $N_{\max}$ alumnos se
-distribuyen uniformemente a lo largo de $T_a \in \{1,5,10\}$~min, con $N_{\max}$ fijo. El
+distribuyen uniformemente a lo largo de $T_a \in \{1,5,10\}$~\si{\minute}, con $N_{\max}$ fijo. El
 caudal medio de ingreso asociado es
 \begin{equation}
   Q \;=\; \frac{N_{\max}}{T_a}.
@@ -137,7 +140,7 @@ La Tabla~\ref{tab:modulos} resume qué se modificó en cada módulo.
 Tipos base & \texttt{Vec3} para posición y velocidad; \texttt{AgentState.z}. La $z$ no es
 grado de libertad dinámico: se interpola por el avance sobre la escalera (no hay $v_z$). \\
 \addlinespace
-Geometría & Cada pared, salida, aula, generador y server lleva su planta $z$. Nuevo tipo
+Geometría & Cada pared, salida, aula, generador y servidor lleva su planta $z$. Nuevo tipo
 \texttt{Stairs} declarado en \texttt{STAIRS.csv}, con consultas por planta. \\
 \addlinespace
 Grafo de navegación & Una malla por planta, unida por aristas de escalera (pie
@@ -172,7 +175,7 @@ distancia de \texttt{Vec3} es euclídea 3D, lista para la heurística del A*, y 
 horizontal para la dinámica planar.
 
 \paragraph{Geometría y formato de escenarios.}
-Cada elemento de geometría (pared, salida, aula, generador y server) lleva una única coordenada
+Cada elemento de geometría (pared, salida, aula, generador y servidor) lleva una única coordenada
 de planta $z$ y conserva su forma planar en \texttt{Vec2}. Se descartó poner la $z$ por extremo:
 permitiría muros inclinados pero rompería la planaridad de la que dependen el CIM por planta y el
 anti-tunneling. Los CSV ya traían la $z$ (antes se descartaba); ahora se honra. La escalera se
@@ -194,7 +197,7 @@ arista de escalera. El grafo se construye desde la geometría, única fuente con
 escaleras.
 
 \paragraph{Vecinos por planta.}
-La detección de vecinos es independiente por planta salvo sobre las escaleras. Un \emph{facade}
+La detección de vecinos es independiente por planta salvo sobre las escaleras. Una \emph{fachada}
 mantiene una grilla CIM 2D por planta más un índice ``puente'' por escalera (fuerza bruta, pues
 sobre el tramo hay pocos agentes). En los descansos los contenedores se acoplan: el agente de
 planta consulta su grilla más los puentes que aterrizan ahí, y el agente en escalera consulta su
@@ -227,20 +230,20 @@ una vista 3D a 45\textdegree{} con las plantas apiladas.
 Cada módulo quedó verde en aislamiento con sus tests unitarios, pero al correr el \emph{primer}
 escenario real de dos plantas \textbf{ningún agente subía a la planta alta}, y sin ningún error
 en tiempo de ejecución. La causa no fue un defecto del diseño sino una serie de caminos de datos
-donde la $z$ se perdía en silencio, con un \emph{default} $z=0$, y la simulación resultante era
+donde la $z$ se perdía en silencio, con un \emph{valor por defecto} $z=0$, y la simulación resultante era
 plausible pero errónea. La depuración destapó varios de esos caminos. La task de un grupo de
 ubicaciones tomaba la $z$ del \emph{primer} candidato, así que un grupo con aulas en ambas plantas
 quedaba clavado en la planta baja; se pasó a llevar la planta por candidato. Las aulas de ambas
 plantas comparten $(x,y)$ ---una sobre otra---, de modo que resolver el candidato elegido por su
 posición colapsaba a la planta baja; se pasó a resolver por índice. El \emph{Furthest Visible
 Point} ruteaba hasta el pie de la escalera y se quedaba ahí, porque el tope, en otra planta, ``no
-es visible''; al llegar al pie el hop avanza ahora explícitamente al tope. La interpolación de la
+es visible''; al llegar al pie el salto (de ruteo) avanza ahora explícitamente al tope. La interpolación de la
 $z$ exigía estar estrictamente entre plantas y nunca arrancaba al pisar el pie; se la detecta
-también cuando el \emph{foot-target} apunta a otra planta. Y tanto los servers como los generadores
+también cuando el \emph{foot-target} apunta a otra planta. Y tanto los servidores como los generadores
 descartaban la $z$ en sus constructores de conveniencia, de modo que las aulas y los spawns de la
 planta alta caían a $z=0$; se propagó la planta de punta a punta. La lección es explícita: al
 agregar una coordenada hay que auditar \emph{todos} los caminos de datos que copian o reconstruyen
-estado, porque los \emph{defaults} silenciosos producen simulaciones que corren y ``se ven bien''
+estado, porque los \emph{valores por defecto} silenciosos producen simulaciones que corren y ``se ven bien''
 pero son erróneas; los tests por módulo no reemplazan un escenario de integración real con dos
 plantas.
 
@@ -260,7 +263,7 @@ descanso y sube el segundo hacia la planta siguiente. Conceptualmente se modela 
 \texttt{Stairs} encadenados a través del descanso, lo que reutiliza toda la maquinaria
 multiplanta (grafo, CIM y CPM) sin reescribir el núcleo. Barandas laterales y el perímetro del
 descanso confinan al agente dentro de la huella; sobre tramos suficientemente anchos el CPM
-aplica un \emph{bias} lateral que separa los carriles de subida y bajada (contraflujo). En la
+aplica un \emph{sesgo} lateral que separa los carriles de subida y bajada (contraflujo). En la
 vista 3D la escalera se dibuja como un perfil de peldaños en lugar de una línea inclinada.
 
 \paragraph{Corrección del salto de $z$.}
@@ -268,7 +271,7 @@ Al inspeccionar la animación se detectó que algunos agentes que llegaban a la 
 de la planta baja a media altura en un solo cuadro, como si se teletransportaran a mitad del
 tramo. El diagnóstico mostró que no era un artefacto del render sino del ruteo: concurrían dos causas,
 la grilla del grafo colocaba nodos dentro de la huella de la escalera ---de modo que el A*
-ruteaba al pie a ras del piso por dentro de la propia huella--- y el cambio de hop del pie al tope ocurría
+ruteaba al pie a ras del piso por dentro de la propia huella--- y el cambio de salto del pie al tope ocurría
 lejos del pie, con lo que la $z$ recién enganchaba a mitad del tramo. Se resolvió excluyendo de
 la grilla del grafo los nodos que caen dentro de la huella de la escalera (de modo que el agente
 entra por el pie con avance nulo) y adelantando el punto en que el ruteo lo compromete a subir.
@@ -276,7 +279,7 @@ Con esto el salto de $z$ por cuadro pasó a ser imperceptible, sin regresar el r
 
 \paragraph{Livelock en la jamba de puerta.}
 En la animación afinada se observó que algunos agentes oscilaban pegados a la jamba de una puerta,
-sin cruzarla, durante decenas de segundos. El diagnóstico descartó el ruteo: el hop era estable y
+sin cruzarla, durante decenas de segundos. El diagnóstico descartó el ruteo: el salto era estable y
 correcto. La causa estaba aguas arriba, en las fuerzas. El CPM trataba la pared como
 \emph{contacto} en cuanto el agente entraba en su radio expandido (el espacio personal, hasta
 $r_{\max}$) y disparaba la velocidad de escape perpendicular, que ignora el objetivo; cerca de una
@@ -305,13 +308,13 @@ informe se midió directamente sobre el archivo de salida de la simulación.
 \section{Simulaciones}
 \label{sec:sim}
 
-\subsection*{El mapa: escenario Escuela}
+\subsection{El mapa: escenario Escuela}
 
 El mapa es cuadrado, de \SI{60}{\metre} de lado, con dos zonas (Figura~\ref{fig:escuela3d}):
 
 \begin{itemize}
   \item \textbf{Recreo} (mitad izquierda, $x\in[0,30]$, una sola planta $z=0$): patio abierto
-  con un kiosco (server con cola) y una salida propia.
+  con un kiosco (servidor con cola) y una salida propia.
   \item \textbf{Edificio} (mitad derecha, $x\in[30,60]$, dos plantas: planta baja a $z=0$ y
   planta alta a $z=\SI{3}{\metre}$): un pasillo vertical central separa 16 aulas (4 por lado y
   por planta). Dos escaleras \emph{switchback} en las puntas conectan ambas plantas, con el
@@ -319,9 +322,9 @@ El mapa es cuadrado, de \SI{60}{\metre} de lado, con dos zonas (Figura~\ref{fig:
   recreo por las esquinas; la planta alta no tiene salida y se evacúa bajando por las escaleras.
 \end{itemize}
 
-Las aulas se modelan como servers de tipo \texttt{CLASSROOM} (recinto colectivo con una sesión
-de clase). Cada escalera tiene un ancho de \SI{2.6}{\metre} y un factor de velocidad
-$\texttt{speed\_factor}=0.38$; sobre los tramos la velocidad efectiva medida es
+Las aulas se modelan como servidores de tipo \texttt{CLASSROOM} (recinto colectivo con una sesión
+de clase). Cada escalera tiene un ancho holgado y un factor de velocidad reducida
+(Tabla~\ref{tab:params}); sobre los tramos la velocidad efectiva medida es
 $\approx\SI{0.59}{\metre\per\second}$, con $z$ monótona respecto del avance.
 
 \begin{figure}[H]
@@ -334,19 +337,17 @@ $z=\SI{3}{\metre}$) con agentes distribuidos en ellas.}
 \label{fig:escuela3d}
 \end{figure}
 
-\subsection*{Parámetros físicos}
+\subsection{Parámetros físicos}
 
 El perfil físico de los agentes es el conjunto de Baglietto y Parisi~\cite{baglietto2011}. En el
 sub-escenario de Evacuación los agentes usan el \emph{modo crisis}: una velocidad deseada de
-emergencia $v_d = v_e = \SI{2.0}{\metre\per\second}$ (frente a los \SI{1.55}{\metre\per\second}
-de la caminata normal), del orden de las velocidades deseadas usadas en modelos de escape
-\cite{helbing2000}. Los parámetros de la simulación se resumen en la Tabla~\ref{tab:params}. El
-paso de integración efectivo es
+emergencia mayor que la de la caminata normal, del orden de las velocidades deseadas usadas en
+modelos de escape \cite{helbing2000}. Los parámetros de la simulación se resumen en la
+Tabla~\ref{tab:params}. El paso de integración efectivo es
 $\Delta t = \min\!\bigl(\Delta t_{\text{esc}},\, r_{\min}/(2\max(v_d,v_e))\bigr)$: el modelo
-acota el $\Delta t$ del escenario a un valor estable para el perfil más rápido presente,
-resultando $\Delta t \approx \SI{0.048}{\second}$ en caminata normal y
-$\Delta t = \SI{0.0375}{\second}$ en la evacuación. La salida se registra cada
-$\Delta t_{\text{out}}=\SI{0.2}{\second}$.
+acota el $\Delta t$ del escenario a un valor estable para el perfil más rápido presente, que
+resulta por lo tanto menor en la evacuación que en la caminata normal. La salida se registra cada
+$\Delta t_{\text{out}}$.
 
 \begin{table}[H]
 \centering
@@ -374,26 +375,26 @@ corresponde al modo crisis (perfil por generador).}
 \label{tab:params}
 \end{table}
 
-\subsection*{Barridos}
+\subsection{Barridos}
 
 \begin{description}
   \item[Evacuación.] Los alumnos arrancan dentro de las aulas de ambas plantas y evacúan a las
   salidas; los de la planta alta bajan por las escaleras. Evacúan en \emph{modo crisis}
-  ($v_d=\SI{2.0}{\metre\per\second}$). El input es la capacidad total $N$, con barrido
+  (velocidad deseada de emergencia, Tabla~\ref{tab:params}). El input es la capacidad total $N$, con barrido
   $N\in\{40,80,120,200,300,400,500\}$ (hasta $\sim$31 alumnos por aula, $\approx$0.5
   agentes/\si{\metre\squared} de ocupación inicial). El tiempo total de simulación es de
   \SI{400}{\second} para $N\le 120$ y escala linealmente con $N$ por encima
   ($400 + 1.2\,(N-120)$~\si{\second}), de modo que toda capacidad tenga margen para vaciarse.
   \item[Ingreso.] Los $N_{\max}=120$ alumnos llegan por las entradas y se dirigen a sus aulas;
   los que entran por el recreo pasan antes por el kiosco. El input es la ventana de llegada
-  $T_a\in\{1,5,10\}$~min a $N_{\max}$ fijo, equivalente a un caudal
-  $Q=N_{\max}/T_a\in\{120,24,12\}$ agentes/min (ec.~\ref{eq:caudal}). El tiempo total es
+  $T_a\in\{1,5,10\}$~\si{\minute} a $N_{\max}$ fijo, equivalente a un caudal
+  $Q=N_{\max}/T_a\in\{120,24,12\}$ agentes por minuto (ec.~\ref{eq:caudal}). El tiempo total es
   $T_a + \SI{250}{\second}$.
   \item[Estudio complementario.] Sobre el mismo sub-escenario de Ingreso se varía $N_{\max}\in
   \{60,120,180,240,300\}$ a ventana fija $T_a=\SI{5}{\minute}$, para ver cómo escala la
   congestión con la cantidad de gente. (A esta ventana las puertas entregan el caudal pedido
   completo; con ventanas más cortas el generador se topa con su límite físico de
-  $\sim$3 personas/min por metro de puerta y el input dejaría de ser alcanzable.)
+  $\sim$3 personas por minuto por metro de puerta y el input dejaría de ser alcanzable.)
 \end{description}
 
 \paragraph{Zona de interés del Ingreso.}
@@ -448,9 +449,9 @@ crece, el segundo lóbulo gana peso relativo y se desplaza hacia tiempos mayores
 la distribución en las capacidades grandes.
 
 Ese desplazamiento es lo que explica el escalar (Figura~\ref{fig:evac-scalar}): el promedio
-crece de forma suave con $N$ (de $38.9$ a $108.2$~\si{\second}, $\times2.8$ entre $N=40$ y
-$N=500$), pero el \textbf{máximo crece mucho más rápido} (de $57.0$ a $301.4$~\si{\second},
-$\times5.3$) porque queda gobernado por el agente más rezagado del lóbulo lento --- el que
+crece de forma suave con $N$ (de $38.9$ a $108.7$~\si{\second}, $\times2.8$ entre $N=40$ y
+$N=500$), pero el \textbf{máximo crece mucho más rápido} (de $57.0$ a $305.2$~\si{\second},
+$\times5.4$) porque queda gobernado por el agente más rezagado del lóbulo lento --- el que
 arranca más lejos de la escalera o encuentra más cola en su boca. La brecha entre ambos crece
 con $N$ y, a partir de $N\approx200$, lo hace a un ritmo aproximadamente constante de
 $\sim$40--45~\si{\second} cada 100 agentes adicionales: reflejo de que, a esas capacidades, la
@@ -462,7 +463,7 @@ De los $N$ agentes no evacúan todos: queda sin evacuar $\approx 1$ por corrida,
 por la escalera \emph{switchback}
 fluye sin atascos ---ningún agente queda retenido en la escalera ni en su boca---, de modo que
 el remanente es casi siempre el último agente todavía en tránsito hacia la salida en el instante
-en que termina la corrida (el output deja de escribir cuadros al vaciarse el edificio): un caso
+en que termina la corrida (la salida deja de escribir cuadros al vaciarse el edificio): un caso
 borde del criterio operativo de evacuado (ec.~\ref{eq:tevac}), no una evacuación fallida. De
 manera esporádica (en corridas aisladas de las 35 del barrido) reaparece en la planta baja el
 \emph{livelock} de contacto con muros descripto en la Sección~\ref{sec:impl}: un agente aislado,
@@ -498,7 +499,7 @@ resume los valores.
 \small
 \begin{tabular}{@{}rrll@{}}
 \toprule
-$T_a$ [\si{\minute}] & $Q$ [ag./min] & Ocupación pico & Ocupación promedio \\
+$T_a$ [\si{\minute}] & $Q$ [ag.\,\si{\per\minute}] & Ocupación pico & Ocupación promedio \\
 \midrule
 1  & 120 & $53.0 \pm 2.1$ & $36.6 \pm 3.6$ \\
 5  & 24  & $21.0 \pm 3.6$ & $8.9 \pm 2.3$ \\
@@ -625,8 +626,9 @@ por las escaleras.}
   escaleras a velocidad reducida, detección de vecinos y física por planta, grafo de navegación
   3D (A* euclídeo unido por escaleras), salida con $z$ y animación 2D por planta más vista 3D
   apilada.
-  \item La escalera \emph{switchback} con descanso, confinamiento y carriles de contraflujo da
-  un comportamiento coherente; el artefacto del salto de $z$ se diagnosticó y resolvió.
+  \item La escalera \emph{switchback} con descanso confina a los agentes dentro de su huella y
+  separa los carriles de subida y bajada; la coordenada $z$ evoluciona de forma monótona a lo
+  largo del descenso.
   \item En la evacuación, el edificio se vacía completo en todo el rango explorado
   ($N$ hasta $500$, $\approx$0.5 agentes/\si{\metre\squared} inicial) y el tiempo de evacuación
   crece con la capacidad en \textbf{dos regímenes}: suave mientras las escaleras absorben el
@@ -649,19 +651,21 @@ por las escaleras.}
 \begin{thebibliography}{9}
 \bibitem{baglietto2011}
 G.~Baglietto y D.~R.~Parisi,
-\emph{Continuous-space automaton model for pedestrian dynamics},
+``Continuous-space automaton model for pedestrian dynamics'',
 Physical Review E \textbf{83}, 056117 (2011).
 % Referencia canónica del CPM ("Baglietto & Parisi"), citada en CpmParameters.java.
 
 \bibitem{martin2024}
-R.~Martin y D.~R.~Parisi,
-\emph{Anisotropic Contractile Particle Model with Avoidance (A-CPM)}, 2024.
+R.~F.~Martin y D.~R.~Parisi,
+``Anisotropic contractile particle model with avoidance for simulating
+pedestrian navigation in dilute and dense systems'',
+Physica A: Statistical Mechanics and its Applications \textbf{633}, 129414 (2024).
 % Variante anisotrópica con evitación usada en el código
 % (CpmOperationalModel.java: "based on Martin & Parisi (2024)", §3.2).
 
 \bibitem{helbing2000}
 D.~Helbing, I.~Farkas y T.~Vicsek,
-\emph{Simulating dynamical features of escape panic},
+``Simulating dynamical features of escape panic'',
 Nature \textbf{407}, 487--490 (2000).
 % Referencia clásica de dinámica de escape: velocidades deseadas elevadas en crisis.
 \end{thebibliography}
